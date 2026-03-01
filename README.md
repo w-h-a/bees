@@ -2,13 +2,11 @@
 
 ## Problem
 
-[Beads](https://github.com/steveyegge/beads) is a powerful issue tracker that grew to serve multi-agent orchestration. For a solo developer that likes to keep their hands on the wheel while pairing with an AI navigator, ~80% of it is dead weight.
-
-Pebble keeps the genuinely good ideas — hash-based IDs, `ready` as a first-class concept, `--json` on everything, dependency DAG, defer/due dates — and drops everything else.
+[Beads](https://github.com/steveyegge/beads) is a powerful issue tracker that grew to serve multi-agent orchestration. For a solo developer that likes to keep their hands on the wheel while pairing with an agentic navigator, ~80% of it is dead weight.
 
 ## Solution
 
-Hash-based IDs, `ready` view, dependency DAG, `--json` everywhere — in a single binary backed by SQLite
+Pebble keeps the features of beads that I use everyday and drops everything else.
 
 ## Architecture
 
