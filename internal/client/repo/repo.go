@@ -15,5 +15,8 @@ type Repo interface {
 	GetDependencies(ctx context.Context, issueID string) ([]domain.Dependency, error)
 	GetComments(ctx context.Context, issueID string) ([]domain.Comment, error)
 	ResolveID(ctx context.Context, partial string) (string, error)
+	ListIssues(ctx context.Context, filter domain.ListFilter) ([]domain.Issue, error)
+	UpdateIssue(ctx context.Context, issue *domain.Issue) error
+	ReplaceLabels(ctx context.Context, issueID string, labels []string) error
 	Close() error
 }

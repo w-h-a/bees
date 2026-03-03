@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/w-h-a/pebble/internal/client/repo"
 	"github.com/w-h-a/pebble/internal/domain"
@@ -17,9 +18,16 @@ const (
 func (s *Service) CreateIssue(ctx context.Context, issue *domain.Issue) (string, error) {
 	issue.SetDefaults()
 
+	slog.Debug("creating issue",
+		"title", issue.Title,
+		"type", string(issue.Type),
+		"priority", *issue.Priority,
+		"label_count", len(issue.Labels),
+	)
+
 	var id string
 
-	for nonce := 0; nonce < maxCollisionRetries; nonce++ {
+	for nonce := range maxCollisionRetries {
 		id = idgen.Generate(s.prefix, issue.Title, issue.Description, nonce)
 
 		exists, err := s.repo.IssueExists(ctx, id)
@@ -56,9 +64,15 @@ func (s *Service) CreateIssue(ctx context.Context, issue *domain.Issue) (string,
 }
 
 func (s *Service) GetIssue(ctx context.Context, idOrPrefix string) (*domain.Issue, error) {
+	slog.Debug("getting issue", "id_or_prefix", idOrPrefix)
+
 	fullID, err := s.repo.ResolveID(ctx, idOrPrefix)
 	if err != nil {
 		return nil, err
+	}
+
+	if fullID != idOrPrefix {
+		slog.Debug("prefix resolved", "input", idOrPrefix, "resolved", fullID)
 	}
 
 	issue, err := s.repo.GetIssue(ctx, fullID)
@@ -83,6 +97,138 @@ func (s *Service) GetIssue(ctx context.Context, idOrPrefix string) (*domain.Issu
 		return nil, fmt.Errorf("failed to get comments: %w", err)
 	}
 	issue.Comments = comments
+
+	slog.Debug("issue retrieved", "id", fullID,
+		"label_count", len(labels),
+		"dep_count", len(deps),
+		"comment_count", len(comments),
+	)
+
+	return issue, nil
+}
+
+func (s *Service) ListIssues(ctx context.Context, filter domain.ListFilter) ([]domain.Issue, error) {
+	if filter.Status == "" {
+		filter.Status = "open"
+	}
+
+	if filter.Sort == "" {
+		filter.Sort = "priority"
+	}
+
+	if filter.Limit <= 0 {
+		filter.Limit = 50
+	}
+
+	slog.Debug("listing issues",
+		"status", filter.Status,
+		"type", filter.Type,
+		"assignee", filter.Assignee,
+		"label", filter.Label,
+		"sort", filter.Sort,
+		"limit", filter.Limit,
+	)
+
+	issues, err := s.repo.ListIssues(ctx, filter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list issues: %w", err)
+	}
+
+	slog.Debug("issues listed", "count", len(issues))
+
+	return issues, nil
+}
+
+func (s *Service) UpdateIssue(ctx context.Context, idOrPrefix string, update domain.IssueUpdate) (*domain.Issue, error) {
+	fullID, err := s.repo.ResolveID(ctx, idOrPrefix)
+	if err != nil {
+		return nil, err
+	}
+
+	if fullID != idOrPrefix {
+		slog.Debug("prefix resolved", "input", idOrPrefix, "resolved", fullID)
+	}
+
+	issue, err := s.repo.GetIssue(ctx, fullID)
+	if err != nil {
+		return nil, err
+	}
+
+	var changed []string
+
+	if update.Title != nil {
+		issue.Title = *update.Title
+		changed = append(changed, "title")
+	}
+
+	if update.Description != nil {
+		issue.Description = *update.Description
+		changed = append(changed, "description")
+	}
+
+	if update.Status != nil {
+		issue.Status = *update.Status
+		changed = append(changed, "status")
+	}
+
+	if update.Type != nil {
+		issue.Type = *update.Type
+		changed = append(changed, "type")
+	}
+
+	if update.Priority != nil {
+		issue.Priority = update.Priority
+		changed = append(changed, "priority")
+	}
+
+	if update.Assignee != nil {
+		issue.Assignee = *update.Assignee
+		changed = append(changed, "assignee")
+	}
+
+	if update.EstimateMins != nil {
+		issue.EstimateMins = *update.EstimateMins
+		changed = append(changed, "estimate_mins")
+	}
+
+	if update.ParentID != nil {
+		issue.ParentID = update.ParentID
+		changed = append(changed, "parent_id")
+	}
+
+	if update.DeferUntil != nil {
+		issue.DeferUntil = update.DeferUntil
+		changed = append(changed, "defer_until")
+	}
+
+	if update.DueAt != nil {
+		issue.DueAt = update.DueAt
+		changed = append(changed, "due_at")
+	}
+
+	issue.UpdatedAt = time.Now()
+
+	if issue.Status == domain.StatusClosed && issue.ClosedAt == nil {
+		now := time.Now()
+		issue.ClosedAt = &now
+		changed = append(changed, "closed_at")
+	}
+
+	slog.Debug("updating issue", "id", fullID, "fields_changed", changed)
+
+	if err := s.repo.UpdateIssue(ctx, issue); err != nil {
+		return nil, fmt.Errorf("failed to update issue: %w", err)
+	}
+
+	if update.Labels != nil {
+		if err := s.repo.ReplaceLabels(ctx, fullID, *update.Labels); err != nil {
+			return nil, fmt.Errorf("failed to replace labels: %w", err)
+		}
+		issue.Labels = *update.Labels
+		changed = append(changed, "labels")
+	}
+
+	slog.Debug("issue updated", "id", fullID, "fields_changed", changed)
 
 	return issue, nil
 }

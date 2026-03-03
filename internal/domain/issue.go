@@ -67,3 +67,26 @@ func (i *Issue) SetDefaults() {
 		i.UpdatedAt = now
 	}
 }
+
+type ListFilter struct {
+	Status   string
+	Type     string
+	Assignee string
+	Label    string
+	Sort     string
+	Limit    int
+}
+
+type IssueUpdate struct {
+	Title        *string
+	Description  *string
+	Status       *Status
+	Type         *Type
+	Priority     *int
+	Assignee     *string
+	EstimateMins *int
+	ParentID     *string
+	DeferUntil   *time.Time
+	DueAt        *time.Time
+	Labels       *[]string
+}

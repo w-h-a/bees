@@ -112,3 +112,38 @@ func printIssue(issue *domain.Issue) {
 		}
 	}
 }
+
+func printIssueTable(issues []domain.Issue) {
+	if len(issues) == 0 {
+		fmt.Println("No issues found.")
+		return
+	}
+
+	fmt.Printf("%s %s %s %s %s\n",
+		dimStyle.Render(fmt.Sprintf("%-14s", "ID")),
+		dimStyle.Render(fmt.Sprintf("%-4s", "PRI")),
+		dimStyle.Render(fmt.Sprintf("%-10s", "TYPE")),
+		dimStyle.Render(fmt.Sprintf("%-12s", "STATUS")),
+		dimStyle.Render("TITLE"),
+	)
+
+	for _, issue := range issues {
+		pri := "P2"
+		if issue.Priority != nil {
+			pri = fmt.Sprintf("P%d", *issue.Priority)
+		}
+
+		statusStyle := statusColors[issue.Status]
+		statusStr := statusStyle.Render(fmt.Sprintf("%-12s", string(issue.Status)))
+		typeStr := dimStyle.Render(fmt.Sprintf("%-10s", string(issue.Type)))
+
+		title := issue.Title
+		if len(title) > 50 {
+			title = title[:47] + "..."
+		}
+
+		fmt.Printf("%-14s %-4s %s %s %s\n", issue.ID, pri, typeStr, statusStr, title)
+	}
+
+	fmt.Printf("\n%s\n", dimStyle.Render(fmt.Sprintf("%d issue(s)", len(issues))))
+}
