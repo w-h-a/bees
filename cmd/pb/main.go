@@ -37,7 +37,7 @@ func newRootCmd() *cobra.Command {
 				slog.SetDefault(slog.New(handler))
 			}
 
-			needsDB := map[string]bool{"create": true, "show": true}
+			needsDB := map[string]bool{"create": true, "show": true, "list": true, "update": true}
 			if !needsDB[cmd.Name()] {
 				return nil
 			}
@@ -81,6 +81,8 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newInitCmd())
 	cmd.AddCommand(newCreateCmd())
 	cmd.AddCommand(newShowCmd())
+	cmd.AddCommand(newListCmd())
+	cmd.AddCommand(newUpdateCmd())
 
 	return cmd
 }

@@ -203,6 +203,132 @@ func (r *sqliteRepo) ResolveID(ctx context.Context, partial string) (string, err
 	}
 }
 
+func (r *sqliteRepo) ListIssues(ctx context.Context, filter domain.ListFilter) ([]domain.Issue, error) {
+	query := "SELECT id, title, description, status, type, priority, assignee, estimate_mins, defer_until, due_at, created_at, updated_at, closed_at, parent_id FROM issues WHERE 1=1"
+	var args []any
+
+	if filter.Status != "all" {
+		status := filter.Status
+		query += " AND status = ?"
+		args = append(args, status)
+	}
+
+	if filter.Type != "" {
+		query += " AND type = ?"
+		args = append(args, filter.Type)
+	}
+
+	if filter.Assignee != "" {
+		query += " AND assignee = ?"
+		args = append(args, filter.Assignee)
+	}
+
+	if filter.Label != "" {
+		query += " AND EXISTS (SELECT 1 FROM labels l WHERE l.issue_id = issues.id AND l.label = ?)"
+		args = append(args, filter.Label)
+	}
+
+	switch filter.Sort {
+	case "created":
+		query += " ORDER BY created_at DESC"
+	case "updated":
+		query += " ORDER BY updated_at DESC"
+	default:
+		query += " ORDER BY priority ASC, updated_at DESC"
+	}
+
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	query += " LIMIT ?"
+	args = append(args, limit)
+
+	slog.Debug("list issues", "query", query, "args", args)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list issues: %w", err)
+	}
+	defer rows.Close()
+
+	var issues []domain.Issue
+
+	for rows.Next() {
+		var issue domain.Issue
+		if err := rows.Scan(
+			&issue.ID,
+			&issue.Title,
+			&issue.Description,
+			&issue.Status,
+			&issue.Type,
+			&issue.Priority,
+			&issue.Assignee,
+			&issue.EstimateMins,
+			&issue.DeferUntil,
+			&issue.DueAt,
+			&issue.CreatedAt,
+			&issue.UpdatedAt,
+			&issue.ClosedAt,
+			&issue.ParentID,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan issue: %w", err)
+		}
+		issues = append(issues, issue)
+	}
+
+	return issues, rows.Err()
+}
+
+func (r *sqliteRepo) UpdateIssue(ctx context.Context, issue *domain.Issue) error {
+	_, err := r.db.ExecContext(
+		ctx,
+		`UPDATE issues SET title = ?, description = ?, status = ?, type = ?, priority = ?, assignee = ?, estimate_mins = ?, defer_until = ?, due_at = ?, updated_at = ?, closed_at = ?, parent_id = ? WHERE id = ?`,
+		issue.Title,
+		issue.Description,
+		string(issue.Status),
+		string(issue.Type),
+		issue.Priority,
+		issue.Assignee,
+		issue.EstimateMins,
+		issue.DeferUntil,
+		issue.DueAt,
+		issue.UpdatedAt,
+		issue.ClosedAt,
+		issue.ParentID,
+		issue.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update issue: %w", err)
+	}
+
+	return nil
+}
+
+func (r *sqliteRepo) ReplaceLabels(ctx context.Context, issueID string, labels []string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, "DELETE FROM labels WHERE issue_id = ?", issueID); err != nil {
+		return fmt.Errorf("failed to delete labels: %w", err)
+	}
+
+	for _, label := range labels {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO labels (issue_id, label) VALUES (?, ?)", issueID, label); err != nil {
+			return fmt.Errorf("failed to insert label %q: %w", label, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit labels: %w", err)
+	}
+
+	return nil
+}
+
 func (r *sqliteRepo) Close() error {
 	return r.db.Close()
 }
