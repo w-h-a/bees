@@ -6,8 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
 func discoverBeesDir() (string, error) {
@@ -29,24 +27,6 @@ func discoverBeesDir() (string, error) {
 
 		dir = parent
 	}
-}
-
-type config struct {
-	IssuePrefix string `yaml:"issue-prefix"`
-}
-
-func readPrefix(beesDir string) (string, error) {
-	data, err := os.ReadFile(filepath.Join(beesDir, "config.yaml"))
-	if err != nil {
-		return "", fmt.Errorf("failed to read config.yaml: %w", err)
-	}
-
-	var cfg config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return "", fmt.Errorf("failed to parse config.yaml: %w", err)
-	}
-
-	return cfg.IssuePrefix, nil
 }
 
 func addToGitExclude() error {

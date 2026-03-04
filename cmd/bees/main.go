@@ -20,6 +20,11 @@ var (
 )
 
 func newRootCmd() *cobra.Command {
+	var (
+		beesDir string
+		cfg     *config
+	)
+
 	cmd := &cobra.Command{
 		Use:   "bees",
 		Short: "A minimal task tracker for developers who pair with agentic navigators.",
@@ -37,27 +42,51 @@ func newRootCmd() *cobra.Command {
 				slog.SetDefault(slog.New(handler))
 			}
 
-			needsDB := map[string]bool{
-				"create":   true,
-				"show":     true,
-				"list":     true,
-				"update":   true,
-				"close":    true,
-				"reopen":   true,
-				"ready":    true,
-				"upcoming": true,
-				"add":      true,
-				"remove":   true,
-				"comment":  true,
-				"search":   true,
-			}
-			if !needsDB[cmd.Name()] {
+			if cmd.Name() == "init" {
 				return nil
 			}
 
-			beesDir, err := discoverBeesDir()
+			var err error
+
+			beesDir, err = discoverBeesDir()
 			if err != nil {
 				return fmt.Errorf("not a bees project (run bees init)")
+			}
+
+			cfg, err = loadConfig(beesDir)
+			if err != nil {
+				return fmt.Errorf("failed to read config: %w", err)
+			}
+
+			if !cmd.Flags().Changed("json") {
+				val, _ := resolveConfig(cfg, "json")
+				if val == "true" || val == "1" {
+					jsonOutput = true
+				}
+			}
+
+			prefix := cfg.IssuePrefix()
+
+			slog.Debug("project discovered", "dir", beesDir, "prefix", prefix)
+
+			slog.Debug("command path", "path", cmd.CommandPath(), "name", cmd.Name())
+
+			needsDB := map[string]bool{
+				"bees create":     true,
+				"bees show":       true,
+				"bees list":       true,
+				"bees search":     true,
+				"bees update":     true,
+				"bees close":      true,
+				"bees reopen":     true,
+				"bees ready":      true,
+				"bees upcoming":   true,
+				"bees dep add":    true,
+				"bees dep remove": true,
+				"bees comment":    true,
+			}
+			if !needsDB[cmd.CommandPath()] {
+				return nil
 			}
 
 			dbPath := filepath.Join(beesDir, "bees.db")
@@ -67,15 +96,7 @@ func newRootCmd() *cobra.Command {
 			}
 			dbCloser = r.Close
 
-			prefix, err := readPrefix(beesDir)
-			if err != nil {
-				r.Close()
-				return fmt.Errorf("failed to read config: %w", err)
-			}
-
 			svc = service.NewService(r, prefix)
-
-			slog.Debug("project discovered", "dir", beesDir, "prefix", prefix)
 
 			return nil
 		},
@@ -101,7 +122,8 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newReadyCmd())
 	cmd.AddCommand(newUpcomingCmd())
 	cmd.AddCommand(newDepCmd())
-	cmd.AddCommand(newCommentCmd())
+	cmd.AddCommand(newCommentCmd(&cfg))
+	cmd.AddCommand(newConfigCmd(&beesDir, &cfg))
 
 	return cmd
 }
