@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/w-h-a/bees/internal/client/repo"
@@ -105,8 +106,7 @@ func (r *sqliteRepo) ResolveID(ctx context.Context, partial string) (string, err
 func (r *sqliteRepo) GetIssue(ctx context.Context, id string) (*domain.Issue, error) {
 	row := r.db.QueryRowContext(
 		ctx,
-		`SELECT id, title, description, status, type, priority, assignee, estimate_mins, defer_until, due_at, created_at, updated_at, closed_at, parent_id
-		FROM issues WHERE id = ?`,
+		"SELECT id, title, description, status, type, priority, assignee, estimate_mins, defer_until, due_at, created_at, updated_at, closed_at, parent_id FROM issues WHERE id = ?",
 		id,
 	)
 
@@ -189,6 +189,59 @@ func (r *sqliteRepo) ListIssues(ctx context.Context, filter domain.ListFilter) (
 
 	var issues []domain.Issue
 
+	for rows.Next() {
+		var issue domain.Issue
+		if err := rows.Scan(
+			&issue.ID,
+			&issue.Title,
+			&issue.Description,
+			&issue.Status,
+			&issue.Type,
+			&issue.Priority,
+			&issue.Assignee,
+			&issue.EstimateMins,
+			&issue.DeferUntil,
+			&issue.DueAt,
+			&issue.CreatedAt,
+			&issue.UpdatedAt,
+			&issue.ClosedAt,
+			&issue.ParentID,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan issue: %w", err)
+		}
+		issues = append(issues, issue)
+	}
+
+	return issues, rows.Err()
+}
+
+func (r *sqliteRepo) SearchIssues(ctx context.Context, query string, limit int) ([]domain.Issue, error) {
+	escaped := strings.NewReplacer("%", `\%`, "_", `\_`).Replace(query)
+	pattern := "%" + escaped + "%"
+
+	if limit <= 0 {
+		limit = 50
+	}
+
+	slog.Debug("search issues", "pattern", pattern)
+
+	rows, err := r.db.QueryContext(
+		ctx,
+		`SELECT id, title, description, status, type, priority, assignee, estimate_mins, defer_until, due_at, created_at, updated_at, closed_at, parent_id
+		FROM issues
+		WHERE title LIKE ? ESCAPE '\' OR description LIKE ? ESCAPE '\'
+		ORDER BY updated_at DESC
+		LIMIT ?`,
+		pattern,
+		pattern,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search issues: %w", err)
+	}
+	defer rows.Close()
+
+	var issues []domain.Issue
 	for rows.Next() {
 		var issue domain.Issue
 		if err := rows.Scan(
@@ -347,7 +400,9 @@ func (r *sqliteRepo) UpcomingIssues(ctx context.Context, now time.Time, days int
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	end := today.AddDate(0, 0, days+1)
 
-	query := "SELECT id, title, description, status, type, priority, assignee, estimate_mins, defer_until, due_at, created_at, updated_at, closed_at, parent_id FROM issues WHERE defer_until IS NOT NULL AND status IN ('open', 'in_progress') AND defer_until >= ? AND defer_until < ?"
+	query := `SELECT id, title, description, status, type, priority, assignee, estimate_mins, defer_until, due_at, created_at, updated_at, closed_at, parent_id 
+	FROM issues 
+	WHERE defer_until IS NOT NULL AND status IN ('open', 'in_progress') AND defer_until >= ? AND defer_until < ?`
 
 	args := []any{today, end}
 
@@ -518,6 +573,29 @@ func (r *sqliteRepo) GetComments(ctx context.Context, issueID string) ([]domain.
 	}
 
 	return comments, rows.Err()
+}
+
+func (r *sqliteRepo) AddComment(ctx context.Context, comment *domain.Comment) error {
+	result, err := r.db.ExecContext(
+		ctx,
+		"INSERT INTO comments (issue_id, author, body, created_at) VALUES (?, ?, ?, ?)",
+		comment.IssueID,
+		comment.Author,
+		comment.Body,
+		comment.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert comment: %w", err)
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("failed to get comment id: %w", err)
+	}
+
+	comment.ID = id
+
+	return nil
 }
 
 func (r *sqliteRepo) Close() error {

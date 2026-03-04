@@ -135,6 +135,23 @@ func (s *Service) ListIssues(ctx context.Context, filter domain.ListFilter) ([]d
 	return issues, nil
 }
 
+func (s *Service) SearchIssues(ctx context.Context, query string, limit int) ([]domain.Issue, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+
+	slog.Debug("searching issues", "query", query, "limit", limit)
+
+	issues, err := s.repo.SearchIssues(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search issues: %w", err)
+	}
+
+	slog.Debug("search results", "count", len(issues))
+
+	return issues, nil
+}
+
 func (s *Service) UpdateIssue(ctx context.Context, idOrPrefix string, update domain.IssueUpdate) (*domain.Issue, error) {
 	slog.Debug("updating issue", "id_or_prefix", idOrPrefix)
 
@@ -451,6 +468,34 @@ func (s *Service) detectCycle(ctx context.Context, startID string) (bool, []stri
 	hasCycle, cycle := dfs.DetectCycle(graph, startID)
 
 	return hasCycle, cycle, nil
+}
+
+func (s *Service) AddComment(ctx context.Context, idOrPrefix string, author string, body string) (*domain.Comment, error) {
+	slog.Debug("adding comment", "id_or_prefix", idOrPrefix)
+
+	fullID, err := s.repo.ResolveID(ctx, idOrPrefix)
+	if err != nil {
+		return nil, err
+	}
+
+	if fullID != idOrPrefix {
+		slog.Debug("prefix resolved", "input", idOrPrefix, "resolved", fullID)
+	}
+
+	comment := &domain.Comment{
+		IssueID:   fullID,
+		Author:    author,
+		Body:      body,
+		CreatedAt: time.Now(),
+	}
+
+	if err := s.repo.AddComment(ctx, comment); err != nil {
+		return nil, fmt.Errorf("failed to add comment: %w", err)
+	}
+
+	slog.Debug("comment added", "id", comment.ID, "issue_id", fullID)
+
+	return comment, nil
 }
 
 type Service struct {
