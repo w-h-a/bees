@@ -48,6 +48,8 @@ func newRootCmd() *cobra.Command {
 				"upcoming": true,
 				"add":      true,
 				"remove":   true,
+				"comment":  true,
+				"search":   true,
 			}
 			if !needsDB[cmd.Name()] {
 				return nil
@@ -92,12 +94,14 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newCreateCmd())
 	cmd.AddCommand(newShowCmd())
 	cmd.AddCommand(newListCmd())
+	cmd.AddCommand(newSearchCmd())
 	cmd.AddCommand(newUpdateCmd())
 	cmd.AddCommand(newCloseCmd())
 	cmd.AddCommand(newReopenCmd())
 	cmd.AddCommand(newReadyCmd())
 	cmd.AddCommand(newUpcomingCmd())
 	cmd.AddCommand(newDepCmd())
+	cmd.AddCommand(newCommentCmd())
 
 	return cmd
 }

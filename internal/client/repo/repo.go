@@ -13,6 +13,7 @@ type Repo interface {
 	ResolveID(ctx context.Context, partial string) (string, error)
 	GetIssue(ctx context.Context, id string) (*domain.Issue, error)
 	ListIssues(ctx context.Context, filter domain.ListFilter) ([]domain.Issue, error)
+	SearchIssues(ctx context.Context, query string, limit int) ([]domain.Issue, error)
 	UpdateIssue(ctx context.Context, issue *domain.Issue) error
 	CloseIssue(ctx context.Context, id string, now time.Time) error
 	ReopenIssue(ctx context.Context, id string, now time.Time) error
@@ -27,6 +28,7 @@ type Repo interface {
 	RemoveDependency(ctx context.Context, issueID, dependsOnID string) (bool, error)
 
 	GetComments(ctx context.Context, issueID string) ([]domain.Comment, error)
+	AddComment(ctx context.Context, comment *domain.Comment) error
 
 	Close() error
 }

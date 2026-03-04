@@ -200,6 +200,103 @@ func TestListIssues_StatusAll(t *testing.T) {
 	assert.Len(t, issues, 2)
 }
 
+func TestSearchIssues_ByTitle(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	_, err := svc.CreateIssue(ctx, &domain.Issue{Title: "Fix login bug"})
+	require.NoError(t, err)
+
+	_, err = svc.CreateIssue(ctx, &domain.Issue{Title: "Add signup page"})
+	require.NoError(t, err)
+
+	// Act
+	issues, err := svc.SearchIssues(ctx, "login", 0)
+	require.NoError(t, err)
+
+	// Assert
+	assert.Len(t, issues, 1)
+	assert.Equal(t, "Fix login bug", issues[0].Title)
+}
+
+func TestSearchIssues_ByDescription(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	_, err := svc.CreateIssue(ctx, &domain.Issue{
+		Title:       "Task A",
+		Description: "Refactor the authentication module",
+	})
+	require.NoError(t, err)
+
+	_, err = svc.CreateIssue(ctx, &domain.Issue{Title: "Task B"})
+	require.NoError(t, err)
+
+	// Act
+	issues, err := svc.SearchIssues(ctx, "authentication", 0)
+	require.NoError(t, err)
+
+	// Assert
+	assert.Len(t, issues, 1)
+	assert.Equal(t, "Task A", issues[0].Title)
+}
+
+func TestSearchIssues_NoResults(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	_, err := svc.CreateIssue(ctx, &domain.Issue{Title: "Something"})
+	require.NoError(t, err)
+
+	// Act
+	issues, err := svc.SearchIssues(ctx, "nonexistent", 0)
+	require.NoError(t, err)
+
+	// Assert
+	assert.Empty(t, issues)
+}
+
+func TestSearchIssues_MatchesBothTitleAndDescription(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	_, err := svc.CreateIssue(ctx, &domain.Issue{Title: "Cache warming"})
+	require.NoError(t, err)
+
+	_, err = svc.CreateIssue(ctx, &domain.Issue{
+		Title:       "Perf improvement",
+		Description: "Add cache layer to reduce latency",
+	})
+	require.NoError(t, err)
+
+	// Act
+	issues, err := svc.SearchIssues(ctx, "cache", 0)
+	require.NoError(t, err)
+
+	// Assert: both match
+	assert.Len(t, issues, 2)
+}
+
 func TestUpdateIssue_AppliesChanges(t *testing.T) {
 	if os.Getenv("INTEGRATION") == "" {
 		t.Skip("set INTEGRATION=1 to run")
@@ -790,6 +887,77 @@ func TestReadyIssues_ExcludesBlocked(t *testing.T) {
 	// Assert: only the blocker is ready
 	assert.Len(t, issues, 1)
 	assert.Equal(t, "Blocker", issues[0].Title)
+}
+
+func TestAddComment(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	issue := &domain.Issue{Title: "Commentable"}
+	id, err := svc.CreateIssue(ctx, issue)
+	require.NoError(t, err)
+
+	// Act
+	comment, err := svc.AddComment(ctx, id, "wes", "looks good")
+	require.NoError(t, err)
+
+	// Assert: returned comment
+	assert.Equal(t, id, comment.IssueID)
+	assert.Equal(t, "wes", comment.Author)
+	assert.Equal(t, "looks good", comment.Body)
+	assert.NotZero(t, comment.ID)
+	assert.False(t, comment.CreatedAt.IsZero())
+
+	// Assert: visible in GetIssue
+	got, err := svc.GetIssue(ctx, id)
+	assert.NoError(t, err)
+	assert.Len(t, got.Comments, 1)
+	assert.Equal(t, "looks good", got.Comments[0].Body)
+}
+
+func TestAddComment_PrefixResolution(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	issue := &domain.Issue{Title: "Prefix comment test"}
+	id, err := svc.CreateIssue(ctx, issue)
+	require.NoError(t, err)
+
+	// Act: comment by prefix
+	partial := id[:len(id)-1]
+	comment, err := svc.AddComment(ctx, partial, "", "via prefix")
+	require.NoError(t, err)
+
+	// Assert
+	assert.Equal(t, id, comment.IssueID)
+	assert.Equal(t, "via prefix", comment.Body)
+}
+
+func TestAddComment_NotFound(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	// Act
+	_, err := svc.AddComment(ctx, "test-zzzz", "", "orphan")
+
+	// Assert
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no issue found")
 }
 
 func setupService(t *testing.T) *Service {
