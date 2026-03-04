@@ -19,5 +19,7 @@ type Repo interface {
 	UpdateIssue(ctx context.Context, issue *domain.Issue) error
 	CloseIssue(ctx context.Context, id string, now time.Time) error
 	ReopenIssue(ctx context.Context, id string, now time.Time) error
+	ReadyIssues(ctx context.Context, sort string, limit int) ([]domain.Issue, error)
+	UpcomingIssues(ctx context.Context, now time.Time, days int, assignee string) ([]domain.Issue, error)
 	Close() error
 }

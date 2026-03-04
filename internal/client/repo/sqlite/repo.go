@@ -358,6 +358,108 @@ func (r *sqliteRepo) ReopenIssue(ctx context.Context, id string, now time.Time) 
 	return nil
 }
 
+func (r *sqliteRepo) ReadyIssues(ctx context.Context, sort string, limit int) ([]domain.Issue, error) {
+	query := "SELECT id, title, description, status, type, priority, assignee, estimate_mins, defer_until, due_at, created_at, updated_at, closed_at, parent_id FROM ready_issues"
+
+	switch sort {
+	case "created":
+		query += " ORDER BY created_at DESC"
+	case "updated":
+		query += " ORDER BY updated_at DESC"
+	default:
+		query += " ORDER BY priority ASC, updated_at DESC"
+	}
+
+	if limit <= 0 {
+		limit = 20
+	}
+	query += " LIMIT ?"
+
+	slog.Debug("ready issues", "query", query, "limit", limit)
+
+	rows, err := r.db.QueryContext(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query ready issues: %w", err)
+	}
+	defer rows.Close()
+
+	var issues []domain.Issue
+	for rows.Next() {
+		var issue domain.Issue
+		if err := rows.Scan(
+			&issue.ID,
+			&issue.Title,
+			&issue.Description,
+			&issue.Status,
+			&issue.Type,
+			&issue.Priority,
+			&issue.Assignee,
+			&issue.EstimateMins,
+			&issue.DeferUntil,
+			&issue.DueAt,
+			&issue.CreatedAt,
+			&issue.UpdatedAt,
+			&issue.ClosedAt,
+			&issue.ParentID,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan ready issues: %w", err)
+		}
+		issues = append(issues, issue)
+	}
+
+	return issues, rows.Err()
+}
+
+func (r *sqliteRepo) UpcomingIssues(ctx context.Context, now time.Time, days int, assignee string) ([]domain.Issue, error) {
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	end := today.AddDate(0, 0, days+1)
+
+	query := "SELECT id, title, description, status, type, priority, assignee, estimate_mins, defer_until, due_at, created_at, updated_at, closed_at, parent_id FROM issues WHERE defer_until IS NOT NULL AND status IN ('open', 'in_progress') AND defer_until >= ? AND defer_until < ?"
+
+	args := []any{today, end}
+
+	if assignee != "" {
+		query += " AND assignee = ?"
+		args = append(args, assignee)
+	}
+
+	query += " ORDER BY defer_until ASC, priority ASC"
+
+	slog.Debug("upcoming issues", "query", query, "args", args)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query upcoming issues: %w", err)
+	}
+	defer rows.Close()
+
+	var issues []domain.Issue
+	for rows.Next() {
+		var issue domain.Issue
+		if err := rows.Scan(
+			&issue.ID,
+			&issue.Title,
+			&issue.Description,
+			&issue.Status,
+			&issue.Type,
+			&issue.Priority,
+			&issue.Assignee,
+			&issue.EstimateMins,
+			&issue.DeferUntil,
+			&issue.DueAt,
+			&issue.CreatedAt,
+			&issue.UpdatedAt,
+			&issue.ClosedAt,
+			&issue.ParentID,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan upcoming issues: %w", err)
+		}
+		issues = append(issues, issue)
+	}
+
+	return issues, rows.Err()
+}
+
 func (r *sqliteRepo) Close() error {
 	return r.db.Close()
 }

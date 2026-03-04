@@ -147,3 +147,53 @@ func printIssueTable(issues []domain.Issue) {
 
 	fmt.Printf("\n%s\n", dimStyle.Render(fmt.Sprintf("%d issue(s)", len(issues))))
 }
+
+func printUpcomingTable(issues []domain.Issue) {
+	if len(issues) == 0 {
+		fmt.Println("No upcoming issues.")
+		return
+	}
+
+	var currentDate string
+
+	for _, issue := range issues {
+		dateStr := ""
+		if issue.DeferUntil != nil {
+			dateStr = issue.DeferUntil.Format("Mon Jan 2")
+		}
+
+		if dateStr != currentDate {
+			if currentDate != "" {
+				fmt.Println()
+			}
+			fmt.Println(headerStyle.Render(dateStr))
+			currentDate = dateStr
+		}
+
+		pri := "P2"
+		if issue.Priority != nil {
+			pri = fmt.Sprintf("P%d", *issue.Priority)
+		}
+
+		statusStyle := statusColors[issue.Status]
+		bullet := "○"
+		if issue.Status == domain.StatusInProgress {
+			bullet = "●"
+		}
+		bullet = statusStyle.Render(bullet)
+
+		title := issue.Title
+		if len(title) > 50 {
+			title = title[:47] + "..."
+		}
+
+		est := ""
+		if issue.EstimateMins > 0 {
+			est = dimStyle.Render(fmt.Sprintf("  %dm", issue.EstimateMins))
+		}
+
+		fmt.Printf("  %s %-4s %-14s %s%s\n", bullet, pri, issue.ID, title, est)
+	}
+
+	fmt.Printf("\n%s\n", dimStyle.Render(fmt.Sprintf("%d issue(s)", len(issues))))
+}

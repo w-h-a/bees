@@ -38,12 +38,14 @@ func newRootCmd() *cobra.Command {
 			}
 
 			needsDB := map[string]bool{
-				"create": true,
-				"show":   true,
-				"list":   true,
-				"update": true,
-				"close":  true,
-				"reopen": true,
+				"create":   true,
+				"show":     true,
+				"list":     true,
+				"update":   true,
+				"close":    true,
+				"reopen":   true,
+				"ready":    true,
+				"upcoming": true,
 			}
 			if !needsDB[cmd.Name()] {
 				return nil
@@ -91,6 +93,8 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newUpdateCmd())
 	cmd.AddCommand(newCloseCmd())
 	cmd.AddCommand(newReopenCmd())
+	cmd.AddCommand(newReadyCmd())
+	cmd.AddCommand(newUpcomingCmd())
 
 	return cmd
 }
