@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -419,6 +420,196 @@ func TestReopenIssue_AlreadyOpen(t *testing.T) {
 	// Assert: idempotent
 	assert.False(t, changed)
 	assert.Equal(t, domain.StatusOpen, got.Status)
+}
+
+func TestReadyIssues_ExcludesDeferredAndClosed(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	ready := &domain.Issue{Title: "Ready task"}
+	_, err := svc.CreateIssue(ctx, ready)
+	require.NoError(t, err)
+
+	deferred := &domain.Issue{Title: "Deferred task"}
+	deferredID, err := svc.CreateIssue(ctx, deferred)
+	require.NoError(t, err)
+
+	future := time.Now().AddDate(0, 0, 7)
+	_, err = svc.UpdateIssue(ctx, deferredID, domain.IssueUpdate{DeferUntil: &future})
+	require.NoError(t, err)
+
+	closed := &domain.Issue{Title: "Closed task"}
+	closedID, err := svc.CreateIssue(ctx, closed)
+	require.NoError(t, err)
+
+	_, _, err = svc.CloseIssue(ctx, closedID)
+	require.NoError(t, err)
+
+	// Act
+	issues, err := svc.ReadyIssues(ctx, "", 0)
+	require.NoError(t, err)
+
+	// Assert: only the undeferred open issue
+	assert.Len(t, issues, 1)
+	assert.Equal(t, "Ready task", issues[0].Title)
+}
+
+func TestReadyIssues_IncludesPastDeferred(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	issue := &domain.Issue{Title: "Was deferred"}
+	id, err := svc.CreateIssue(ctx, issue)
+	require.NoError(t, err)
+
+	yesterday := time.Now().AddDate(0, 0, -1)
+	_, err = svc.UpdateIssue(ctx, id, domain.IssueUpdate{DeferUntil: &yesterday})
+	require.NoError(t, err)
+
+	// Act
+	issues, err := svc.ReadyIssues(ctx, "", 0)
+	require.NoError(t, err)
+
+	// Assert: past-deferred issue is ready
+	assert.Len(t, issues, 1)
+	assert.Equal(t, "Was deferred", issues[0].Title)
+}
+
+func TestUpcomingIssues_WindowFilter(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	today := time.Now()
+	threeDays := today.AddDate(0, 0, 3)
+	tenDays := today.AddDate(0, 0, 10)
+
+	todayIssue := &domain.Issue{Title: "Today"}
+	todayID, err := svc.CreateIssue(ctx, todayIssue)
+	require.NoError(t, err)
+	_, err = svc.UpdateIssue(ctx, todayID, domain.IssueUpdate{DeferUntil: &today})
+	require.NoError(t, err)
+
+	soonIssue := &domain.Issue{Title: "Soon"}
+	soonID, err := svc.CreateIssue(ctx, soonIssue)
+	require.NoError(t, err)
+	_, err = svc.UpdateIssue(ctx, soonID, domain.IssueUpdate{DeferUntil: &threeDays})
+	require.NoError(t, err)
+
+	farIssue := &domain.Issue{Title: "Far out"}
+	farID, err := svc.CreateIssue(ctx, farIssue)
+	require.NoError(t, err)
+	_, err = svc.UpdateIssue(ctx, farID, domain.IssueUpdate{DeferUntil: &tenDays})
+	require.NoError(t, err)
+
+	// Act
+	issues, err := svc.UpcomingIssues(ctx, 7, "")
+	require.NoError(t, err)
+
+	// Assert: today and soon, not far
+	assert.Len(t, issues, 2)
+	assert.Equal(t, "Today", issues[0].Title)
+	assert.Equal(t, "Soon", issues[1].Title)
+}
+
+func TestUpcomingIssues_ExcludesNoDefer(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	issue := &domain.Issue{Title: "No defer"}
+	_, err := svc.CreateIssue(ctx, issue)
+	require.NoError(t, err)
+
+	// Act
+	issues, err := svc.UpcomingIssues(ctx, 7, "")
+	require.NoError(t, err)
+
+	// Assert
+	assert.Empty(t, issues)
+}
+
+func TestUpcomingIssues_FilterByAssignee(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	tomorrow := time.Now().AddDate(0, 0, 1)
+	wes := "wes"
+	other := "other"
+
+	a := &domain.Issue{Title: "Wes task"}
+	aID, err := svc.CreateIssue(ctx, a)
+	require.NoError(t, err)
+
+	_, err = svc.UpdateIssue(ctx, aID, domain.IssueUpdate{DeferUntil: &tomorrow, Assignee: &wes})
+	require.NoError(t, err)
+
+	b := &domain.Issue{Title: "Other task"}
+	bID, err := svc.CreateIssue(ctx, b)
+	require.NoError(t, err)
+
+	_, err = svc.UpdateIssue(ctx, bID, domain.IssueUpdate{DeferUntil: &tomorrow, Assignee: &other})
+	require.NoError(t, err)
+
+	// Act
+	issues, err := svc.UpcomingIssues(ctx, 7, "wes")
+	require.NoError(t, err)
+
+	// Assert
+	assert.Len(t, issues, 1)
+	assert.Equal(t, "Wes task", issues[0].Title)
+}
+
+func TestUpcomingIssues_ExcludesClosed(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	tomorrow := time.Now().AddDate(0, 0, 1)
+
+	issue := &domain.Issue{Title: "Closed before defer"}
+	id, err := svc.CreateIssue(ctx, issue)
+	require.NoError(t, err)
+
+	_, err = svc.UpdateIssue(ctx, id, domain.IssueUpdate{DeferUntil: &tomorrow})
+	require.NoError(t, err)
+
+	_, _, err = svc.CloseIssue(ctx, id)
+	require.NoError(t, err)
+
+	// Act
+	issues, err := svc.UpcomingIssues(ctx, 7, "")
+	require.NoError(t, err)
+
+	// Assert: closed issue excluded despite defer_until in window
+	assert.Empty(t, issues)
 }
 
 func setupService(t *testing.T) *Service {

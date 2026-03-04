@@ -328,6 +328,43 @@ func (s *Service) ReopenIssue(ctx context.Context, idOrPrefix string) (*domain.I
 	return issue, changed, nil
 }
 
+func (s *Service) ReadyIssues(ctx context.Context, sort string, limit int) ([]domain.Issue, error) {
+	if sort == "" {
+		sort = "priority"
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+
+	slog.Debug("listing ready issues", "sort", sort, "limit", limit)
+
+	issues, err := s.repo.ReadyIssues(ctx, sort, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list ready issues: %w", err)
+	}
+
+	slog.Debug("ready issues listed", "count", len(issues))
+
+	return issues, nil
+}
+
+func (s *Service) UpcomingIssues(ctx context.Context, days int, assignee string) ([]domain.Issue, error) {
+	if days <= 0 {
+		days = 15
+	}
+
+	slog.Debug("listing upcoming issues", "days", days, "assignee", assignee)
+
+	issues, err := s.repo.UpcomingIssues(ctx, time.Now(), days, assignee)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list upcoming issues: %w", err)
+	}
+
+	slog.Debug("upcoming issues listed", "count", len(issues))
+
+	return issues, nil
+}
+
 type Service struct {
 	repo   repo.Repo
 	prefix string
