@@ -1,5 +1,9 @@
 # bees
 
+<div align="center">
+  <img src="./.github/assets/bees.png" alt="Bees Mascot" width="400" />
+</div>
+
 ## Problem
 
 [Beads](https://github.com/steveyegge/beads) is a powerful issue tracker that grew to serve multi-agent orchestration. For a solo developer that likes to keep their hands on the wheel while pairing with an agentic navigator, ~80% of it is dead weight.
