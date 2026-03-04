@@ -73,6 +73,12 @@ func (r *sqliteRepo) IssueExists(ctx context.Context, id string) (bool, error) {
 }
 
 func (r *sqliteRepo) ResolveID(ctx context.Context, partial string) (string, error) {
+	var exactID string
+	err := r.db.QueryRowContext(ctx, "SELECT id FROM issues WHERE id = ?", partial).Scan(&exactID)
+	if err == nil {
+		return exactID, nil
+	}
+
 	rows, err := r.db.QueryContext(ctx, "SELECT id FROM issues WHERE id LIKE ?", partial+"%")
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve id: %w", err)

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"github.com/w-h-a/bees/internal/client/importer/beads"
+	"github.com/w-h-a/bees/internal/client/importer/noop"
 	"github.com/w-h-a/bees/internal/client/repo"
 	"github.com/w-h-a/bees/internal/client/repo/sqlite"
 	"github.com/w-h-a/bees/internal/service"
@@ -84,6 +86,7 @@ func newRootCmd() *cobra.Command {
 				"bees dep add":    true,
 				"bees dep remove": true,
 				"bees comment":    true,
+				"bees import":     true,
 			}
 			if !needsDB[cmd.CommandPath()] {
 				return nil
@@ -96,7 +99,15 @@ func newRootCmd() *cobra.Command {
 			}
 			dbCloser = r.Close
 
-			svc = service.NewService(r, prefix)
+			i, _ := noop.NewImporter()
+			if cmd.CommandPath() == "bees import" {
+				i, err = beads.NewImporter()
+				if err != nil {
+					return fmt.Errorf("failed to initialize importer: %w", err)
+				}
+			}
+
+			svc = service.NewService(r, i, prefix)
 
 			return nil
 		},
@@ -112,6 +123,7 @@ func newRootCmd() *cobra.Command {
 	cmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enable debug logging")
 
 	cmd.AddCommand(newInitCmd())
+	cmd.AddCommand(newImportCmd())
 	cmd.AddCommand(newCreateCmd())
 	cmd.AddCommand(newShowCmd())
 	cmd.AddCommand(newListCmd())

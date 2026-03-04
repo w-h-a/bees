@@ -3,19 +3,125 @@ package service
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
 	"time"
 
+	"github.com/w-h-a/bees/internal/client/importer"
 	"github.com/w-h-a/bees/internal/client/repo"
 	"github.com/w-h-a/bees/internal/domain"
 	"github.com/w-h-a/bees/internal/util/dfs"
+	"github.com/w-h-a/bees/internal/util/hash"
 	"github.com/w-h-a/bees/internal/util/idgen"
 )
 
 const (
 	maxCollisionRetries = 5
 )
+
+type Service struct {
+	repo   repo.Repo
+	imp    importer.Importer
+	prefix string
+}
+
+func (s *Service) ImportIssues(ctx context.Context, r io.Reader) (ImportResult, error) {
+	issues, err := s.imp.Parse(r)
+	if err != nil {
+		return ImportResult{}, fmt.Errorf("failed to parse import data: %w", err)
+	}
+
+	slog.Debug("importing issues", "count", len(issues))
+
+	var result ImportResult
+
+	type pending struct {
+		issue   domain.Issue
+		created bool
+	}
+	var processed []pending
+
+	for _, issue := range issues {
+		issue.SetDefaults()
+
+		exists, err := s.repo.IssueExists(ctx, issue.ID)
+		if err != nil {
+			slog.Debug("skipping issue", "id", issue.ID, "error", err)
+			result.Skipped++
+			continue
+		}
+
+		if !exists {
+			if err := s.repo.CreateIssue(ctx, &issue); err != nil {
+				slog.Debug("skipping issue on create", "id", issue.ID, "error", err)
+				result.Skipped++
+				continue
+			}
+			result.Created++
+			processed = append(processed, pending{issue: issue, created: true})
+			slog.Debug("issue created", "id", issue.ID)
+			continue
+		}
+
+		existing, err := s.repo.GetIssue(ctx, issue.ID)
+		if err != nil {
+			slog.Debug("skipping issue on get", "id", issue.ID, "error", err)
+			result.Skipped++
+			continue
+		}
+
+		existingLabels, _ := s.repo.GetLabels(ctx, issue.ID)
+		existing.Labels = existingLabels
+
+		if hash.Fields(issueFields(existing)) == hash.Fields(issueFields(&issue)) {
+			result.Unchanged++
+			slog.Debug("issue unchanged", "id", issue.ID)
+			continue
+		}
+
+		issue.UpdatedAt = time.Now()
+
+		if err := s.repo.UpdateIssue(ctx, &issue); err != nil {
+			slog.Debug("skipping issue on update", "id", issue.ID, "error", err)
+			result.Skipped++
+			continue
+		}
+
+		result.Updated++
+		processed = append(processed, pending{issue: issue, created: false})
+
+		slog.Debug("issue updated", "id", issue.ID)
+	}
+
+	for _, p := range processed {
+		for _, dep := range p.issue.Dependencies {
+			if err := s.repo.AddDependency(ctx, dep); err != nil {
+				slog.Debug("skipping dependency", "issue", dep.IssueID, "depends_on", dep.DependsOnID, "error", err)
+			}
+		}
+	}
+
+	for _, p := range processed {
+		if !p.created {
+			continue
+		}
+		for i := range p.issue.Comments {
+			if err := s.repo.AddComment(ctx, &p.issue.Comments[i]); err != nil {
+				slog.Debug("skipping comment", "issue", p.issue.Comments[i].IssueID, "error", err)
+			}
+		}
+	}
+
+	slog.Debug("import complete",
+		"created", result.Created,
+		"updated", result.Updated,
+		"unchanged", result.Unchanged,
+		"skipped", result.Skipped,
+	)
+
+	return result, nil
+}
 
 func (s *Service) CreateIssue(ctx context.Context, issue *domain.Issue) (string, error) {
 	issue.SetDefaults()
@@ -498,14 +604,10 @@ func (s *Service) AddComment(ctx context.Context, idOrPrefix string, author stri
 	return comment, nil
 }
 
-type Service struct {
-	repo   repo.Repo
-	prefix string
-}
-
-func NewService(repo repo.Repo, prefix string) *Service {
+func NewService(repo repo.Repo, imp importer.Importer, prefix string) *Service {
 	return &Service{
 		repo:   repo,
+		imp:    imp,
 		prefix: prefix,
 	}
 }
