@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/w-h-a/bees/internal/client/repo"
 	"github.com/w-h-a/bees/internal/client/repo/sqlite"
-	"gopkg.in/yaml.v3"
 )
 
 func newInitCmd() *cobra.Command {
@@ -47,18 +46,16 @@ func newInitCmd() *cobra.Command {
 
 			slog.Debug("database initialized", "path", dbPath)
 
-			cfg := config{IssuePrefix: prefix}
-			data, err := yaml.Marshal(&cfg)
-			if err != nil {
-				return fmt.Errorf("failed to marshal config: %w", err)
+			cfg := newConfig()
+			if err := cfg.Set("issue-prefix", prefix); err != nil {
+				return fmt.Errorf("failed to set prefix: %w", err)
 			}
 
-			configPath := filepath.Join(beesDir, "config.yaml")
-			if err := os.WriteFile(configPath, data, 0o644); err != nil {
+			if err := saveConfig(beesDir, cfg); err != nil {
 				return fmt.Errorf("failed to write config: %w", err)
 			}
 
-			slog.Debug("config written", "path", configPath, "prefix", prefix)
+			slog.Debug("config written", "path", filepath.Join(beesDir, "config.yaml"), "prefix", prefix)
 
 			if stealth {
 				if err := addToGitExclude(); err != nil {

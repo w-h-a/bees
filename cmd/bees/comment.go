@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newCommentCmd() *cobra.Command {
+func newCommentCmd(cfg **config) *cobra.Command {
 	var author string
 
 	cmd := &cobra.Command{
@@ -17,6 +17,10 @@ func newCommentCmd() *cobra.Command {
 		Short: "Add a comment to an issue",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if author == "" && *cfg != nil {
+				author, _ = resolveConfig(*cfg, "author")
+			}
+
 			comment, err := svc.AddComment(cmd.Context(), args[0], author, args[1])
 			if err != nil {
 				return err
