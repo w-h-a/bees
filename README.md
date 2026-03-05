@@ -13,9 +13,9 @@
 Bees follows Beads as an alternative to a sea of .md files and drops everything else.
 
 ## Install      
-            
+
 ```sh                                                                                
-go install github.com/w-h-a/bees/cmd/bees@latest                                                                       
+go install github.com/w-h-a/bees/cmd/bees@latest        
 ```                                                                                                        
 
 ## Quick Start
