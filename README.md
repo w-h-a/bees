@@ -14,7 +14,7 @@ Bees follows Beads as an alternative to a sea of .md files and drops everything 
 
 ## Architecture
 
-### Flow Chart
+### Flowchart
 
 ```mermaid
 graph TD
@@ -28,11 +28,14 @@ graph TD
 
   subgraph Client ["Client Layer"]
     REPO_IF[Repo Interface]
+    IMP_IF[Importer Interface]
   end
 
   subgraph Infra ["Infrastructure"]
     SQLITE[SQLite via modernc.org/sqlite]
     DB[(bees.db)]
+    BEADS[Beads JSONL Parser]
+    JSONL[(.jsonl file)]
   end
 
   subgraph Domain ["Domain Layer"]
@@ -44,8 +47,11 @@ graph TD
   CMD --> SVC
   SVC --> Domain
   SVC --> REPO_IF
+  SVC --> IMP_IF
   REPO_IF -.-> SQLITE
   SQLITE --> DB
+  IMP_IF -.-> BEADS
+  BEADS --> JSONL
 ```
 
 ### ER Diagram

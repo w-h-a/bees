@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/w-h-a/bees/internal/client/importer/noop"
 	"github.com/w-h-a/bees/internal/client/repo"
 	"github.com/w-h-a/bees/internal/client/repo/sqlite"
 	"github.com/w-h-a/bees/internal/domain"
@@ -968,7 +969,10 @@ func setupService(t *testing.T) *Service {
 	r, err := sqlite.NewRepo(repo.WithLocation(dbPath))
 	require.NoError(t, err)
 
+	i, err := noop.NewImporter()
+	require.NoError(t, err)
+
 	t.Cleanup(func() { r.Close() })
 
-	return NewService(r, "test")
+	return NewService(r, i, "test")
 }
