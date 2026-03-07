@@ -15,8 +15,8 @@ import (
 )
 
 type sqliteRepo struct {
-	option repo.Options
-	db     *sql.DB
+	options repo.Options
+	db      *sql.DB
 }
 
 func (r *sqliteRepo) CreateIssue(ctx context.Context, issue *domain.Issue) error {
@@ -681,14 +681,14 @@ func (r *sqliteRepo) configure() error {
 		"SELECT count(*) FROM sqlite_master WHERE type='table' AND name='schema_version'",
 	).Scan(&count)
 	if err != nil {
-		return fmt.Errorf("check schema_version: %w", err)
+		return fmt.Errorf("failed to check schema_version: %w", err)
 	}
 
 	var current int
 	if count > 0 {
 		err = r.db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_version").Scan(&current)
 		if err != nil {
-			return fmt.Errorf("read schema version: %w", err)
+			return fmt.Errorf("failed to read schema version: %w", err)
 		}
 	}
 
@@ -699,25 +699,28 @@ func (r *sqliteRepo) configure() error {
 
 	tx, err := r.db.Begin()
 	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
+		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
 
 	if _, err := tx.Exec(ddl); err != nil {
-		return fmt.Errorf("exec ddl: %w", err)
+		return fmt.Errorf("failed to exec ddl: %w", err)
 	}
 
 	if count == 0 {
-		_, err = tx.Exec("INSERT INTO schema_version (version) VALUES (?)", schemaVersion)
+		_, err := tx.Exec("INSERT INTO schema_version (version) VALUES (?)", schemaVersion)
+		if err != nil {
+			return fmt.Errorf("failed to insert schema version: %w", err)
+		}
 	} else {
-		_, err = tx.Exec("UPDATE schema_version SET version = ?", schemaVersion)
-	}
-	if err != nil {
-		return fmt.Errorf("update schema version: %w", err)
+		_, err := tx.Exec("UPDATE schema_version SET version = ?", schemaVersion)
+		if err != nil {
+			return fmt.Errorf("failed to update schema version: %w", err)
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
+		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	slog.Debug("schema migrated", "from", current, "to", schemaVersion)
@@ -734,8 +737,8 @@ func NewRepo(opts ...repo.Option) (repo.Repo, error) {
 	}
 
 	r := &sqliteRepo{
-		option: options,
-		db:     db,
+		options: options,
+		db:      db,
 	}
 
 	if err := r.configure(); err != nil {
