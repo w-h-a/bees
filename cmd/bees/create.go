@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -35,6 +36,11 @@ func newCreateCmd() *cobra.Command {
 				default:
 					return fmt.Errorf("invalid type %q: must be one of task, bug, feature, chore, decision, epic", issueType)
 				}
+			}
+
+			if strings.TrimSpace(args[0]) == "" {
+				slog.Debug("title validation failed", "attempted", args[0])
+				return fmt.Errorf("title may not be empty")
 			}
 
 			issue := domain.Issue{

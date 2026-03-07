@@ -169,6 +169,57 @@ func TestCreateIssue_AcceptsBoundaryPriorities(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestCreateIssue_RejectsEmptyTitle(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	// Act
+	_, err := svc.CreateIssue(ctx, &domain.Issue{Title: ""})
+
+	// Assert
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "title may not be empty")
+}
+
+func TestCreateIssue_RejectsWhitespaceOnlyTitle(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	// Act
+	_, err := svc.CreateIssue(ctx, &domain.Issue{Title: "   "})
+
+	// Assert
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "title may not be empty")
+}
+
+func TestCreateIssue_AcceptsSingleCharTitle(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	// Act
+	id, err := svc.CreateIssue(ctx, &domain.Issue{Title: "x"})
+
+	// Assert
+	require.NoError(t, err)
+	require.NotEmpty(t, id)
+}
+
 func TestListIssues_DefaultsToOpen(t *testing.T) {
 	if os.Getenv("INTEGRATION") == "" {
 		t.Skip("set INTEGRATION=1 to run")

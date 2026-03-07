@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/w-h-a/bees/internal/client/importer"
@@ -123,6 +124,11 @@ func (s *Service) ImportIssues(ctx context.Context, r io.Reader) (ImportResult, 
 
 func (s *Service) CreateIssue(ctx context.Context, issue *domain.Issue) (string, error) {
 	issue.SetDefaults()
+
+	if strings.TrimSpace(issue.Title) == "" {
+		slog.Debug("title validation failed", "trimmed_length", len(issue.Title))
+		return "", fmt.Errorf("title may not be empty")
+	}
 
 	if *issue.Priority < 0 || *issue.Priority > 4 {
 		slog.Debug("priority validation failed", "attempted", *issue.Priority)
