@@ -1318,6 +1318,101 @@ func TestRemoveDependency_Idempotent(t *testing.T) {
 	require.False(t, changed)
 }
 
+func TestBuildGraph_FullGraph(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	aID, err := svc.CreateIssue(ctx, &domain.Issue{Title: "Alpha"})
+	require.NoError(t, err)
+	bID, err := svc.CreateIssue(ctx, &domain.Issue{Title: "Beta"})
+	require.NoError(t, err)
+	cID, err := svc.CreateIssue(ctx, &domain.Issue{Title: "Charlie"})
+	require.NoError(t, err)
+	dID, err := svc.CreateIssue(ctx, &domain.Issue{Title: "Delta"})
+	require.NoError(t, err)
+
+	_, _, err = svc.AddDependency(ctx, aID, bID)
+	require.NoError(t, err)
+	_, _, err = svc.AddDependency(ctx, cID, dID)
+	require.NoError(t, err)
+
+	// Act
+	graph, err := svc.BuildGraph(ctx, nil)
+	require.NoError(t, err)
+
+	// Assert
+	require.Len(t, graph.Nodes, 4)
+	require.Len(t, graph.Edges, 2)
+	require.Contains(t, graph.Nodes, aID)
+	require.Contains(t, graph.Nodes, bID)
+	require.Contains(t, graph.Nodes, cID)
+	require.Contains(t, graph.Nodes, dID)
+}
+
+func TestBuildGraph_ScopedToID(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	aID, err := svc.CreateIssue(ctx, &domain.Issue{Title: "Alpha"})
+	require.NoError(t, err)
+	bID, err := svc.CreateIssue(ctx, &domain.Issue{Title: "Beta"})
+	require.NoError(t, err)
+	cID, err := svc.CreateIssue(ctx, &domain.Issue{Title: "Charlie"})
+	require.NoError(t, err)
+	dID, err := svc.CreateIssue(ctx, &domain.Issue{Title: "Delta"})
+	require.NoError(t, err)
+	eID, err := svc.CreateIssue(ctx, &domain.Issue{Title: "Echo"})
+	require.NoError(t, err)
+
+	_, _, err = svc.AddDependency(ctx, aID, bID)
+	require.NoError(t, err)
+	_, _, err = svc.AddDependency(ctx, bID, cID)
+	require.NoError(t, err)
+	_, _, err = svc.AddDependency(ctx, dID, eID)
+	require.NoError(t, err)
+
+	// Act
+	graph, err := svc.BuildGraph(ctx, &aID)
+	require.NoError(t, err)
+
+	// Assert
+	require.Len(t, graph.Nodes, 3)
+	require.Contains(t, graph.Nodes, aID)
+	require.Contains(t, graph.Nodes, bID)
+	require.Contains(t, graph.Nodes, cID)
+	require.NotContains(t, graph.Nodes, dID)
+	require.NotContains(t, graph.Nodes, eID)
+	require.Len(t, graph.Edges, 2)
+}
+
+func TestBuildGraph_EmptyGraph(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	// Act
+	graph, err := svc.BuildGraph(ctx, nil)
+	require.NoError(t, err)
+
+	// Assert
+	require.Empty(t, graph.Nodes)
+	require.Empty(t, graph.Edges)
+}
+
 func TestReadyIssues_ExcludesBlocked(t *testing.T) {
 	if os.Getenv("INTEGRATION") == "" {
 		t.Skip("set INTEGRATION=1 to run")

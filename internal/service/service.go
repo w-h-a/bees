@@ -619,6 +619,45 @@ func (s *Service) RemoveDependency(ctx context.Context, blockerIDOrPrefix, block
 	return blockerID, blockedID, changed, nil
 }
 
+func (s *Service) BuildGraph(ctx context.Context, id *string) (domain.Graph, error) {
+	slog.Debug("building graph", "scoped", id != nil)
+
+	deps, err := s.repo.GetDependencyGraph(ctx)
+	if err != nil {
+		return domain.Graph{}, fmt.Errorf("failed to get dependency graph: %w", err)
+	}
+
+	seen := map[string]struct{}{}
+	for _, dep := range deps {
+		seen[dep.IssueID] = struct{}{}
+		seen[dep.DependsOnID] = struct{}{}
+	}
+
+	issues := make(map[string]domain.Issue, len(seen))
+	for issueID := range seen {
+		issue, err := s.repo.GetIssue(ctx, issueID)
+		if err != nil {
+			slog.Debug("skipping graph node", "id", issueID, "error", err)
+			continue
+		}
+		issues[issueID] = *issue
+	}
+
+	graph := domain.BuildGraph(deps, issues)
+
+	if id != nil {
+		resolvedID, err := s.repo.ResolveID(ctx, *id)
+		if err != nil {
+			return domain.Graph{}, err
+		}
+		graph = graph.Subgraph(resolvedID)
+	}
+
+	slog.Debug("graph built", "node_count", len(graph.Nodes), "edge_count", len(graph.Edges), "scoped", id != nil)
+
+	return graph, nil
+}
+
 func (s *Service) AddComment(ctx context.Context, idOrPrefix string, author string, body string) (*domain.Comment, error) {
 	slog.Debug("adding comment", "id_or_prefix", idOrPrefix)
 
