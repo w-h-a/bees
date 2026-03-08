@@ -40,3 +40,21 @@ func DetectCycle(graph map[string][]string, startID string) (bool, []string) {
 	hasCycle := walk(startID)
 	return hasCycle, cycle
 }
+
+func Reachable(graph map[string][]string, startID string) map[string]bool {
+	visited := map[string]bool{}
+
+	var walk func(string)
+	walk = func(id string) {
+		if visited[id] {
+			return
+		}
+		visited[id] = true
+		for _, next := range graph[id] {
+			walk(next)
+		}
+	}
+
+	walk(startID)
+	return visited
+}
