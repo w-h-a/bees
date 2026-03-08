@@ -1440,6 +1440,51 @@ func TestBuildGraph_EmptyGraph(t *testing.T) {
 	require.Empty(t, graph.Edges)
 }
 
+func TestBuildGraph_NodeFields(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	now := time.Now().UTC().Truncate(24 * time.Hour)
+
+	aID, err := svc.CreateIssue(ctx, &domain.Issue{
+		Title:        "Alpha",
+		Type:         domain.TypeFeature,
+		DeferUntil:   &now,
+		EstimateMins: 30,
+	})
+	require.NoError(t, err)
+	bID, err := svc.CreateIssue(ctx, &domain.Issue{
+		Title:        "Beta",
+		Type:         domain.TypeChore,
+		EstimateMins: 20,
+	})
+	require.NoError(t, err)
+
+	_, _, err = svc.AddDependency(ctx, aID, bID)
+	require.NoError(t, err)
+
+	// Act
+	graph, err := svc.BuildGraph(ctx, nil)
+	require.NoError(t, err)
+
+	// Assert
+	nodeA := graph.Nodes[aID]
+	require.Equal(t, domain.TypeFeature, nodeA.Type)
+	require.NotNil(t, nodeA.DeferUntil)
+	require.Equal(t, now, *nodeA.DeferUntil)
+	require.Equal(t, 30, nodeA.EstimateMins)
+
+	nodeB := graph.Nodes[bID]
+	require.Equal(t, domain.TypeChore, nodeB.Type)
+	require.Nil(t, nodeB.DeferUntil)
+	require.Equal(t, 20, nodeB.EstimateMins)
+}
+
 func TestReadyIssues_ExcludesBlocked(t *testing.T) {
 	if os.Getenv("INTEGRATION") == "" {
 		t.Skip("set INTEGRATION=1 to run")

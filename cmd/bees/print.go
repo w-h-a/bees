@@ -236,7 +236,17 @@ func printGraph(g domain.Graph) {
 			connector = "└── "
 		}
 
-		fmt.Printf("%s%s%s %s\n", prefix, connector, statusStyle.Render(id), n.Title)
+		typeStr := dimStyle.Render(fmt.Sprintf("[%s]", n.Type))
+		deferStr := ""
+		if n.DeferUntil != nil {
+			deferStr = dimStyle.Render(fmt.Sprintf("  %s", n.DeferUntil.Format("Jan 2")))
+		}
+		estStr := ""
+		if n.EstimateMins > 0 {
+			estStr = dimStyle.Render(fmt.Sprintf("  %dm", n.EstimateMins))
+		}
+
+		fmt.Printf("%s%s%s %s %s%s%s\n", prefix, connector, statusStyle.Render(id), typeStr, n.Title, deferStr, estStr)
 
 		next := prefix + "│   "
 		if last {
@@ -253,7 +263,18 @@ func printGraph(g domain.Graph) {
 	for i, root := range roots {
 		n := g.Nodes[root]
 		statusStyle := statusColors[n.Status]
-		fmt.Printf("%s %s\n", statusStyle.Render(root), n.Title)
+
+		typeStr := dimStyle.Render(fmt.Sprintf("[%s]", n.Type))
+		deferStr := ""
+		if n.DeferUntil != nil {
+			deferStr = dimStyle.Render(fmt.Sprintf("  %s", n.DeferUntil.Format("Jan 2")))
+		}
+		estStr := ""
+		if n.EstimateMins > 0 {
+			estStr = dimStyle.Render(fmt.Sprintf("  %dm", n.EstimateMins))
+		}
+
+		fmt.Printf("%s %s %s%s%s\n", statusStyle.Render(root), typeStr, n.Title, deferStr, estStr)
 
 		kids := children[root]
 		sort.Strings(kids)

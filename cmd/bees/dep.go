@@ -136,10 +136,13 @@ func newDepGraphCmd() *cobra.Command {
 			}
 
 			type jsonNode struct {
-				ID       string `json:"id"`
-				Title    string `json:"title"`
-				Status   string `json:"status"`
-				Priority int    `json:"priority"`
+				ID           string `json:"id"`
+				Title        string `json:"title"`
+				Status       string `json:"status"`
+				Priority     int    `json:"priority"`
+				Type         string `json:"type"`
+				DeferUntil   string `json:"defer_until,omitempty"`
+				EstimateMins int    `json:"estimate_mins,omitempty"`
 			}
 			type jsonEdge struct {
 				From string `json:"from"`
@@ -152,11 +155,18 @@ func newDepGraphCmd() *cobra.Command {
 
 			nodes := make([]jsonNode, 0, len(graph.Nodes))
 			for _, n := range graph.Nodes {
+				deferStr := ""
+				if n.DeferUntil != nil {
+					deferStr = n.DeferUntil.Format("2006-01-02")
+				}
 				nodes = append(nodes, jsonNode{
-					ID:       n.ID,
-					Title:    n.Title,
-					Status:   string(n.Status),
-					Priority: n.Priority,
+					ID:           n.ID,
+					Title:        n.Title,
+					Status:       string(n.Status),
+					Priority:     n.Priority,
+					Type:         string(n.Type),
+					DeferUntil:   deferStr,
+					EstimateMins: n.EstimateMins,
 				})
 			}
 			sort.Slice(nodes, func(i, j int) bool { return nodes[i].ID < nodes[j].ID })
