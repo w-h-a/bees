@@ -135,3 +135,69 @@ func TestDetectCycle_StartNotInGraph(t *testing.T) {
 	require.False(t, hasCycle)
 	require.Empty(t, cycle)
 }
+
+func TestReachable_EmptyGraph(t *testing.T) {
+	if len(os.Getenv("INTEGRATION")) > 0 {
+		t.Skip()
+	}
+
+	// Act
+	result := Reachable(nil, "a")
+
+	// Assert
+	require.Equal(t, map[string]bool{"a": true}, result)
+}
+
+func TestReachable_LinearChain(t *testing.T) {
+	if len(os.Getenv("INTEGRATION")) > 0 {
+		t.Skip()
+	}
+
+	// Arrange
+	graph := map[string][]string{
+		"a": {"b"},
+		"b": {"c"},
+	}
+
+	// Act
+	result := Reachable(graph, "a")
+
+	// Assert
+	require.Equal(t, map[string]bool{"a": true, "b": true, "c": true}, result)
+}
+
+func TestReachable_StartNotInGraph(t *testing.T) {
+	if len(os.Getenv("INTEGRATION")) > 0 {
+		t.Skip()
+	}
+
+	// Arrange
+	graph := map[string][]string{
+		"x": {"y"},
+	}
+
+	// Act
+	result := Reachable(graph, "a")
+
+	// Assert
+	require.Equal(t, map[string]bool{"a": true}, result)
+}
+
+func TestReachable_Diamond(t *testing.T) {
+	if len(os.Getenv("INTEGRATION")) > 0 {
+		t.Skip()
+	}
+
+	// Arrange
+	graph := map[string][]string{
+		"a": {"b", "c"},
+		"b": {"d"},
+		"c": {"d"},
+	}
+
+	// Act
+	result := Reachable(graph, "a")
+
+	// Assert
+	require.Equal(t, map[string]bool{"a": true, "b": true, "c": true, "d": true}, result)
+}
