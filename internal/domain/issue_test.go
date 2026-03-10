@@ -61,3 +61,108 @@ func TestSetDefaults_PreservesExisting(t *testing.T) {
 	require.Equal(t, ts, i.CreatedAt)
 	require.Equal(t, ts, i.UpdatedAt)
 }
+
+func TestDescendants_FromEpic(t *testing.T) {
+	if len(os.Getenv("INTEGRATION")) > 0 {
+		t.Skip()
+	}
+
+	// Arrange
+	e1 := "e1"
+	c1 := "c1"
+	issues := []Issue{
+		{ID: "e1", Title: "Epic"},
+		{ID: "c1", Title: "Grouping chore", ParentID: &e1},
+		{ID: "t1", Title: "Sub-task 1", ParentID: &c1},
+		{ID: "t2", Title: "Sub-task 2", ParentID: &c1},
+		{ID: "f1", Title: "Direct child 1", ParentID: &e1},
+		{ID: "f2", Title: "Direct child 2", ParentID: &e1},
+		{ID: "u1", Title: "Unrelated"},
+	}
+
+	// Act
+	got := Descendants(issues, "e1")
+
+	// Assert
+	require.Len(t, got, 5)
+	ids := map[string]bool{}
+	for _, iss := range got {
+		ids[iss.ID] = true
+	}
+	require.True(t, ids["c1"])
+	require.True(t, ids["t1"])
+	require.True(t, ids["t2"])
+	require.True(t, ids["f1"])
+	require.True(t, ids["f2"])
+	require.False(t, ids["e1"])
+	require.False(t, ids["u1"])
+}
+
+func TestDescendants_FromMiddleNode(t *testing.T) {
+	if len(os.Getenv("INTEGRATION")) > 0 {
+		t.Skip()
+	}
+
+	// Arrange
+	e1 := "e1"
+	c1 := "c1"
+	issues := []Issue{
+		{ID: "e1", Title: "Epic"},
+		{ID: "c1", Title: "Grouping chore", ParentID: &e1},
+		{ID: "t1", Title: "Sub-task 1", ParentID: &c1},
+		{ID: "t2", Title: "Sub-task 2", ParentID: &c1},
+		{ID: "f1", Title: "Direct child 1", ParentID: &e1},
+		{ID: "f2", Title: "Direct child 2", ParentID: &e1},
+		{ID: "u1", Title: "Unrelated"},
+	}
+
+	// Act
+	got := Descendants(issues, "c1")
+
+	// Assert
+	require.Len(t, got, 2)
+	ids := map[string]bool{}
+	for _, iss := range got {
+		ids[iss.ID] = true
+	}
+	require.True(t, ids["t1"])
+	require.True(t, ids["t2"])
+}
+
+func TestDescendants_UnknownRoot(t *testing.T) {
+	if len(os.Getenv("INTEGRATION")) > 0 {
+		t.Skip()
+	}
+
+	// Arrange
+	e1 := "e1"
+	issues := []Issue{
+		{ID: "e1", Title: "Epic"},
+		{ID: "c1", Title: "Child", ParentID: &e1},
+	}
+
+	// Act
+	got := Descendants(issues, "unknown")
+
+	// Assert
+	require.Empty(t, got)
+}
+
+func TestDescendants_FlatList(t *testing.T) {
+	if len(os.Getenv("INTEGRATION")) > 0 {
+		t.Skip()
+	}
+
+	// Arrange
+	issues := []Issue{
+		{ID: "a", Title: "Alpha"},
+		{ID: "b", Title: "Beta"},
+		{ID: "c", Title: "Charlie"},
+	}
+
+	// Act
+	got := Descendants(issues, "a")
+
+	// Assert
+	require.Empty(t, got)
+}
