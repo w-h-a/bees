@@ -82,6 +82,13 @@ type ListFilter struct {
 	Limit    int
 }
 
+type ExportFilter struct {
+	Status   string
+	Type     string
+	Assignee string
+	Label    string
+}
+
 type IssueUpdate struct {
 	Title        *string
 	Description  *string
