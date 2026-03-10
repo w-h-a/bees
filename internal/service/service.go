@@ -114,12 +114,7 @@ func (s *Service) ImportIssues(ctx context.Context, r io.Reader) (ImportResult, 
 		}
 	}
 
-	slog.Debug("import complete",
-		"created", result.Created,
-		"updated", result.Updated,
-		"unchanged", result.Unchanged,
-		"skipped", result.Skipped,
-	)
+	slog.Debug("import complete", "created", result.Created, "updated", result.Updated, "unchanged", result.Unchanged, "skipped", result.Skipped)
 
 	return result, nil
 }
@@ -184,12 +179,7 @@ func (s *Service) CreateIssue(ctx context.Context, issue *domain.Issue) (string,
 		issue.ParentID = &resolvedParent
 	}
 
-	slog.Debug("creating issue",
-		"title", issue.Title,
-		"type", string(issue.Type),
-		"priority", *issue.Priority,
-		"label_count", len(issue.Labels),
-	)
+	slog.Debug("creating issue", "title", issue.Title, "type", string(issue.Type), "priority", *issue.Priority, "label_count", len(issue.Labels))
 
 	var id string
 
@@ -258,11 +248,7 @@ func (s *Service) GetIssue(ctx context.Context, idOrPrefix string) (*domain.Issu
 	}
 	issue.Comments = comments
 
-	slog.Debug("issue retrieved", "id", fullID,
-		"label_count", len(labels),
-		"dep_count", len(deps),
-		"comment_count", len(comments),
-	)
+	slog.Debug("issue retrieved", "id", fullID, "label_count", len(labels), "dep_count", len(deps), "comment_count", len(comments))
 
 	return issue, nil
 }
@@ -290,15 +276,7 @@ func (s *Service) ListIssues(ctx context.Context, filter domain.ListFilter) ([]d
 		filter.Parent = ""
 	}
 
-	slog.Debug("listing issues",
-		"status", filter.Status,
-		"type", filter.Type,
-		"assignee", filter.Assignee,
-		"label", filter.Label,
-		"parent", parentID,
-		"sort", filter.Sort,
-		"limit", filter.Limit,
-	)
+	slog.Debug("listing issues", "status", filter.Status, "type", filter.Type, "assignee", filter.Assignee, "label", filter.Label, "parent", parentID, "sort", filter.Sort, "limit", filter.Limit)
 
 	issues, err := s.repo.ListIssues(ctx, filter)
 	if err != nil {
