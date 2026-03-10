@@ -2,6 +2,8 @@ package domain
 
 import (
 	"time"
+
+	"github.com/w-h-a/bees/internal/util/dfs"
 )
 
 type Status string
@@ -75,6 +77,7 @@ type ListFilter struct {
 	Type     string
 	Assignee string
 	Label    string
+	Parent   string
 	Sort     string
 	Limit    int
 }
@@ -91,4 +94,30 @@ type IssueUpdate struct {
 	DeferUntil   *time.Time
 	DueAt        *time.Time
 	Labels       *[]string
+}
+
+func Descendants(issues []Issue, rootID string) []Issue {
+	adj := map[string][]string{}
+	issueMap := map[string]Issue{}
+
+	for _, iss := range issues {
+		issueMap[iss.ID] = iss
+		if iss.ParentID != nil {
+			adj[*iss.ParentID] = append(adj[*iss.ParentID], iss.ID)
+		}
+	}
+
+	reachable := dfs.Reachable(adj, rootID)
+
+	var result []Issue
+	for id := range reachable {
+		if id == rootID {
+			continue
+		}
+		if iss, ok := issueMap[id]; ok {
+			result = append(result, iss)
+		}
+	}
+
+	return result
 }
