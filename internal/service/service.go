@@ -114,6 +114,17 @@ func (s *Service) ImportIssues(ctx context.Context, r io.Reader) (ImportResult, 
 		}
 	}
 
+	for _, p := range processed {
+		if !p.created {
+			continue
+		}
+		for i := range p.issue.Handoffs {
+			if err := s.repo.AddHandoff(ctx, &p.issue.Handoffs[i]); err != nil {
+				slog.Debug("skipping handoff", "issue", p.issue.Handoffs[i].IssueID, "error", err)
+			}
+		}
+	}
+
 	slog.Debug("import complete", "created", result.Created, "updated", result.Updated, "unchanged", result.Unchanged, "skipped", result.Skipped)
 
 	return result, nil
