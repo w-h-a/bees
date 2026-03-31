@@ -46,6 +46,7 @@ type Issue struct {
 	Labels       []string     `json:"labels"`
 	Dependencies []Dependency `json:"dependencies"`
 	Comments     []Comment    `json:"comments"`
+	Handoffs     []Handoff    `json:"handoffs"`
 }
 
 func (i *Issue) SetDefaults() {
