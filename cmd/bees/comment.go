@@ -40,7 +40,7 @@ func newCommentCmd(cfg **config) *cobra.Command {
 			}
 
 			enc := json.NewEncoder(os.Stdout)
-			enc.SetIndent("", "  ")
+			enc.SetIndent("", " ")
 
 			return enc.Encode(comment)
 		},

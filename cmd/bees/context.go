@@ -25,6 +25,7 @@ func newContextCmd() *cobra.Command {
 
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", " ")
+
 			return enc.Encode(summary)
 		},
 	}

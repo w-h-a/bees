@@ -106,7 +106,7 @@ func newConfigSetCmd(beesDir *string, cfg **config) *cobra.Command {
 			}
 
 			enc := json.NewEncoder(os.Stdout)
-			enc.SetIndent("", "  ")
+			enc.SetIndent("", " ")
 
 			return enc.Encode(map[string]string{
 				"key":   key,
