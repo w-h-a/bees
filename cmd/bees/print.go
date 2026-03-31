@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/w-h-a/bees/internal/domain"
+	"github.com/w-h-a/bees/internal/service"
 )
 
 var (
@@ -111,6 +112,79 @@ func printIssue(issue *domain.Issue) {
 			}
 			fmt.Println()
 		}
+	}
+}
+
+func printContextSummary(s *service.ContextSummary) {
+	printed := false
+
+	printed = printContextSection("In Progress", s.InProgress, true, printed)
+	printed = printContextSection("Ready", s.Ready, false, printed)
+	printed = printContextSection("Blocked", s.Blocked, false, printed)
+	printContextSection("Recently Done", s.RecentlyDone, false, printed)
+}
+
+func printContextSection(header string, issues []domain.Issue, showHandoffs bool, preceded bool) bool {
+	if len(issues) == 0 {
+		return preceded
+	}
+
+	if preceded {
+		fmt.Println()
+	}
+
+	fmt.Println(sectionStyle.Render(header))
+
+	for _, issue := range issues {
+		pri := "P2"
+		if issue.Priority != nil {
+			pri = fmt.Sprintf("P%d", *issue.Priority)
+		}
+
+		statusStyle := statusColors[issue.Status]
+		statusStr := statusStyle.Render(fmt.Sprintf("%-12s", string(issue.Status)))
+		typeStr := dimStyle.Render(fmt.Sprintf("%-10s", string(issue.Type)))
+
+		title := issue.Title
+		if len(title) > 50 {
+			title = title[:47] + "..."
+		}
+
+		est := ""
+		if issue.EstimateMins > 0 {
+			est = dimStyle.Render(fmt.Sprintf("  %dm", issue.EstimateMins))
+		}
+
+		fmt.Printf("  %-14s %-4s %s %s %s%s\n", issue.ID, pri, typeStr, statusStr, title, est)
+
+		if !showHandoffs || len(issue.Handoffs) == 0 {
+			continue
+		}
+
+		latest := issue.Handoffs[len(issue.Handoffs)-1]
+		printHandoffInline(latest)
+	}
+
+	return true
+}
+
+func printHandoffInline(h domain.Handoff) {
+	sections := []struct {
+		label string
+		body  string
+	}{
+		{"Done", h.Done},
+		{"Remaining", h.Remaining},
+		{"Decisions", h.Decisions},
+		{"Uncertain", h.Uncertain},
+	}
+
+	for _, s := range sections {
+		if strings.TrimSpace(s.body) == "" {
+			continue
+		}
+
+		fmt.Printf("    %s %s\n", dimStyle.Render(s.label+":"), s.body)
 	}
 }
 

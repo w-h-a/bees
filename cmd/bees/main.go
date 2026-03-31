@@ -86,6 +86,7 @@ func newRootCmd() *cobra.Command {
 				"bees close":      true,
 				"bees reopen":     true,
 				"bees delete":     true,
+				"bees context":    true,
 				"bees ready":      true,
 				"bees upcoming":   true,
 				"bees dep add":    true,
@@ -146,6 +147,7 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newCloseCmd())
 	cmd.AddCommand(newReopenCmd())
 	cmd.AddCommand(newDeleteCmd())
+	cmd.AddCommand(newContextCmd())
 	cmd.AddCommand(newReadyCmd())
 	cmd.AddCommand(newUpcomingCmd())
 	cmd.AddCommand(newDepCmd())
