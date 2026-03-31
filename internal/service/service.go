@@ -252,7 +252,13 @@ func (s *Service) GetIssue(ctx context.Context, idOrPrefix string) (*domain.Issu
 	}
 	issue.Comments = comments
 
-	slog.Debug("issue retrieved", "id", fullID, "label_count", len(labels), "dep_count", len(deps), "comment_count", len(comments))
+	handoffs, err := s.repo.GetHandoffs(ctx, fullID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get handoffs: %w", err)
+	}
+	issue.Handoffs = handoffs
+
+	slog.Debug("issue retrieved", "id", fullID, "label_count", len(labels), "dep_count", len(deps), "comment_count", len(comments), "handoff_count", len(handoffs))
 
 	return issue, nil
 }
@@ -494,6 +500,11 @@ func (s *Service) CloseIssue(ctx context.Context, idOrPrefix string) (*domain.Is
 		return nil, false, fmt.Errorf("failed to get comments: %w", err)
 	}
 
+	issue.Handoffs, err = s.repo.GetHandoffs(ctx, fullID)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to get handoffs: %w", err)
+	}
+
 	return issue, changed, nil
 }
 
@@ -543,6 +554,11 @@ func (s *Service) ReopenIssue(ctx context.Context, idOrPrefix string) (*domain.I
 	issue.Comments, err = s.repo.GetComments(ctx, fullID)
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to get comments: %w", err)
+	}
+
+	issue.Handoffs, err = s.repo.GetHandoffs(ctx, fullID)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to get handoffs: %w", err)
 	}
 
 	return issue, changed, nil
@@ -751,6 +767,43 @@ func (s *Service) AddComment(ctx context.Context, idOrPrefix string, author stri
 	return comment, nil
 }
 
+func (s *Service) AddHandoff(
+	ctx context.Context,
+	idOrPrefix string,
+	done string,
+	remaining string,
+	decisions string,
+	uncertain string,
+) (*domain.Handoff, error) {
+	slog.Debug("adding handoff", "id_or_prefix", idOrPrefix)
+
+	fullID, err := s.repo.ResolveID(ctx, idOrPrefix)
+	if err != nil {
+		return nil, err
+	}
+
+	if fullID != idOrPrefix {
+		slog.Debug("prefix resolved", "input", idOrPrefix, "resolved", fullID)
+	}
+
+	handoff := &domain.Handoff{
+		IssueID:   fullID,
+		Done:      done,
+		Remaining: remaining,
+		Decisions: decisions,
+		Uncertain: uncertain,
+		CreatedAt: time.Now(),
+	}
+
+	if err := s.repo.AddHandoff(ctx, handoff); err != nil {
+		return nil, fmt.Errorf("failed to add handoff: %w", err)
+	}
+
+	slog.Debug("handoff added", "id", handoff.ID, "issue_id", fullID)
+
+	return handoff, nil
+}
+
 func (s *Service) populateRelations(ctx context.Context, issues []domain.Issue) error {
 	for i := range issues {
 		id := issues[i].ID
@@ -772,6 +825,12 @@ func (s *Service) populateRelations(ctx context.Context, issues []domain.Issue) 
 			return fmt.Errorf("failed to get comments for %s: %w", id, err)
 		}
 		issues[i].Comments = comments
+
+		handoffs, err := s.repo.GetHandoffs(ctx, id)
+		if err != nil {
+			return fmt.Errorf("failed to get handoffs for %s: %w", id, err)
+		}
+		issues[i].Handoffs = handoffs
 	}
 
 	return nil
