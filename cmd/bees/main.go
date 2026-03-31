@@ -93,6 +93,7 @@ func newRootCmd() *cobra.Command {
 				"bees dep remove": true,
 				"bees dep graph":  true,
 				"bees comment":    true,
+				"bees handoff":    true,
 			}
 			if !needsDB[cmd.CommandPath()] {
 				return nil
@@ -152,6 +153,7 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newUpcomingCmd())
 	cmd.AddCommand(newDepCmd())
 	cmd.AddCommand(newCommentCmd(&cfg))
+	cmd.AddCommand(newHandoffCmd())
 	cmd.AddCommand(newConfigCmd(&beesDir, &cfg))
 	cmd.AddCommand(newVersionCmd())
 
