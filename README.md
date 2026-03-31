@@ -32,16 +32,17 @@ bees ready                           # what should I work on next?
 ## Commands
 
 ```text
-bees init [--stealth] [--prefix]     bees ready [--sort --limit]
-bees create "title" [flags]          bees upcoming [--days --assignee]
-bees show <id>                       bees search <query>
-bees update <id> [flags]             bees dep add <id> --blocks <id>
-bees close <id>                      bees dep remove <id> <id>
-bees reopen <id>                     bees dep graph [<id>]
-bees list [--status --type ...]      bees comment <id> "text"
-bees import <file.jsonl>             bees config set|get|list
-bees export [-o file.jsonl]          bees version
-bees delete [--closed-before --yes]
+bees init [--stealth] [--prefix]     bees context
+bees create "title" [flags]          bees ready [--sort --limit]
+bees show <id>                       bees upcoming [--days --assignee]
+bees update <id> [flags]             bees search <query>
+bees close <id>                      bees dep add <id> --blocks <id>
+bees reopen <id>                     bees dep remove <id> <id>
+bees list [--status --type ...]      bees dep graph [<id>]
+bees import <file.jsonl>             bees comment <id> "text"
+bees export [-o file.jsonl]          bees handoff <id> [--done --remaining ...]
+bees delete [--closed-before --yes]  bees config set|get|list
+                                     bees version
 ```
 
 ## Architecture
@@ -76,6 +77,7 @@ graph TD
     ISSUE[Issue]
     DEP[Dependency]
     COMMENT[Comment]
+    HANDOFF[Handoff]
   end
 
   CMD --> SVC
@@ -122,7 +124,17 @@ erDiagram
     text body
   }
 
+  handoffs {
+    int id PK
+    text issue_id FK
+    text done
+    text remaining
+    text decisions
+    text uncertain
+  }
+
   issues ||--o{ dependencies : "blocked by"
   issues ||--o{ labels : has
   issues ||--o{ comments : has
+  issues ||--o{ handoffs : has
 ```
