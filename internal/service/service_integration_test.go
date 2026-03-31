@@ -2080,6 +2080,124 @@ func TestAddComment_NotFound(t *testing.T) {
 	require.Contains(t, err.Error(), "no issue found")
 }
 
+func TestAddHandoff_basic(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	issue := &domain.Issue{Title: "Handoff target"}
+	id, err := svc.CreateIssue(ctx, issue)
+	require.NoError(t, err)
+
+	// Act
+	handoff, err := svc.AddHandoff(ctx, id, "implemented parsing", "need validation", "chose JSON format", "error handling approach")
+	require.NoError(t, err)
+
+	// Assert: returned handoff
+	require.Equal(t, id, handoff.IssueID)
+	require.Equal(t, "implemented parsing", handoff.Done)
+	require.Equal(t, "need validation", handoff.Remaining)
+	require.Equal(t, "chose JSON format", handoff.Decisions)
+	require.Equal(t, "error handling approach", handoff.Uncertain)
+	require.NotZero(t, handoff.ID)
+	require.False(t, handoff.CreatedAt.IsZero())
+
+	// Assert: visible in GetIssue
+	got, err := svc.GetIssue(ctx, id)
+	require.NoError(t, err)
+	require.Len(t, got.Handoffs, 1)
+	require.Equal(t, "implemented parsing", got.Handoffs[0].Done)
+}
+
+func TestAddHandoff_multiple(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	issue := &domain.Issue{Title: "Multi handoff"}
+	id, err := svc.CreateIssue(ctx, issue)
+	require.NoError(t, err)
+
+	// Act
+	_, err = svc.AddHandoff(ctx, id, "first done", "first remaining", "first decisions", "first uncertain")
+	require.NoError(t, err)
+
+	_, err = svc.AddHandoff(ctx, id, "second done", "second remaining", "second decisions", "second uncertain")
+	require.NoError(t, err)
+
+	// Assert: both returned in order
+	got, err := svc.GetIssue(ctx, id)
+	require.NoError(t, err)
+	require.Len(t, got.Handoffs, 2)
+	require.Equal(t, "first done", got.Handoffs[0].Done)
+	require.Equal(t, "second done", got.Handoffs[1].Done)
+}
+
+func TestAddHandoff_nonexistent_issue(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	// Act
+	_, err := svc.AddHandoff(ctx, "test-zzzz", "done", "remaining", "decisions", "uncertain")
+
+	// Assert
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no issue found")
+}
+
+func TestPopulateRelations_includes_handoffs(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	issue := &domain.Issue{Title: "Handoff hydration test", Labels: []string{"api"}}
+	id, err := svc.CreateIssue(ctx, issue)
+	require.NoError(t, err)
+
+	_, err = svc.AddComment(ctx, id, "wes", "a comment")
+	require.NoError(t, err)
+
+	_, err = svc.AddHandoff(ctx, id, "done stuff", "remaining stuff", "decided stuff", "uncertain stuff")
+	require.NoError(t, err)
+
+	// Act: list uses populateRelations
+	issues, err := svc.ListIssues(ctx, domain.ListFilter{})
+	require.NoError(t, err)
+
+	// Assert: find the issue
+	var got *domain.Issue
+	for i := range issues {
+		if issues[i].ID == id {
+			got = &issues[i]
+			break
+		}
+	}
+	require.NotNil(t, got, "expected issue not found in list")
+
+	// Assert: all relations populated including handoffs
+	require.Equal(t, []string{"api"}, got.Labels)
+	require.Len(t, got.Comments, 1)
+	require.Len(t, got.Handoffs, 1)
+	require.Equal(t, "done stuff", got.Handoffs[0].Done)
+}
+
 func setupService(t *testing.T) *Service {
 	t.Helper()
 
