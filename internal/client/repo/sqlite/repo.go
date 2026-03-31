@@ -785,6 +785,75 @@ func (r *sqliteRepo) AddComment(ctx context.Context, comment *domain.Comment) er
 	return nil
 }
 
+func (r *sqliteRepo) GetHandoffs(ctx context.Context, issueID string) ([]domain.Handoff, error) {
+	rows, err := r.db.QueryContext(
+		ctx,
+		"SELECT id, issue_id, done, remaining, decisions, uncertain, created_at FROM handoffs WHERE issue_id = ? ORDER BY created_at",
+		issueID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query handoffs: %w", err)
+	}
+	defer rows.Close()
+
+	var handoffs []domain.Handoff
+
+	for rows.Next() {
+		var h domain.Handoff
+		if err := rows.Scan(&h.ID, &h.IssueID, &h.Done, &h.Remaining, &h.Decisions, &h.Uncertain, &h.CreatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan handoff: %w", err)
+		}
+		handoffs = append(handoffs, h)
+	}
+
+	return handoffs, rows.Err()
+}
+
+func (r *sqliteRepo) GetLatestHandoff(ctx context.Context, issueID string) (*domain.Handoff, error) {
+	row := r.db.QueryRowContext(
+		ctx,
+		"SELECT id, issue_id, done, remaining, decisions, uncertain, created_at FROM handoffs WHERE issue_id = ? ORDER BY created_at DESC LIMIT 1",
+		issueID,
+	)
+
+	var h domain.Handoff
+
+	err := row.Scan(&h.ID, &h.IssueID, &h.Done, &h.Remaining, &h.Decisions, &h.Uncertain, &h.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan latest handoff: %w", err)
+	}
+
+	return &h, nil
+}
+
+func (r *sqliteRepo) AddHandoff(ctx context.Context, handoff *domain.Handoff) error {
+	result, err := r.db.ExecContext(
+		ctx,
+		"INSERT INTO handoffs (issue_id, done, remaining, decisions, uncertain, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+		handoff.IssueID,
+		handoff.Done,
+		handoff.Remaining,
+		handoff.Decisions,
+		handoff.Uncertain,
+		handoff.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert handoff: %w", err)
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("failed to get handoff id: %w", err)
+	}
+
+	handoff.ID = id
+
+	return nil
+}
+
 func (r *sqliteRepo) Close() error {
 	return r.db.Close()
 }
