@@ -18,6 +18,7 @@ type jsonlIssue struct {
 	Labels           []string       `json:"labels"`
 	Dependencies     []jsonlDep     `json:"dependencies"`
 	Comments         []jsonlComment `json:"comments"`
+	Handoffs         []jsonlHandoff `json:"handoffs"`
 }
 
 type jsonlDep struct {
@@ -32,5 +33,15 @@ type jsonlComment struct {
 	IssueID   string    `json:"issue_id"`
 	Author    string    `json:"author"`
 	Text      string    `json:"text"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type jsonlHandoff struct {
+	ID        int64     `json:"id"`
+	IssueID   string    `json:"issue_id"`
+	Done      string    `json:"done"`
+	Remaining string    `json:"remaining"`
+	Decisions string    `json:"decisions"`
+	Uncertain string    `json:"uncertain"`
 	CreatedAt time.Time `json:"created_at"`
 }

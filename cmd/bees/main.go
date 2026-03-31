@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/w-h-a/bees/internal/client/exporter/jsonl"
 	noopexporter "github.com/w-h-a/bees/internal/client/exporter/noop"
-	"github.com/w-h-a/bees/internal/client/importer/beads"
+	"github.com/w-h-a/bees/internal/client/importer/bees"
 	noopimporter "github.com/w-h-a/bees/internal/client/importer/noop"
 	"github.com/w-h-a/bees/internal/client/repo"
 	"github.com/w-h-a/bees/internal/client/repo/sqlite"
@@ -108,7 +108,7 @@ func newRootCmd() *cobra.Command {
 
 			i, _ := noopimporter.NewImporter()
 			if cmd.CommandPath() == "bees import" {
-				i, err = beads.NewImporter()
+				i, err = bees.NewImporter()
 				if err != nil {
 					return fmt.Errorf("failed to initialize importer: %w", err)
 				}

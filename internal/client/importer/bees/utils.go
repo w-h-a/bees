@@ -1,4 +1,4 @@
-package beads
+package bees
 
 import (
 	"time"
@@ -6,7 +6,7 @@ import (
 	"github.com/w-h-a/bees/internal/domain"
 )
 
-func mapToIssue(bi beadsIssue) domain.Issue {
+func mapToIssue(bi beesIssue) domain.Issue {
 	issue := domain.Issue{
 		ID:           bi.ID,
 		Title:        bi.Title,
@@ -48,6 +48,17 @@ func mapToIssue(bi beadsIssue) domain.Issue {
 			Author:    c.Author,
 			Body:      c.Text,
 			CreatedAt: c.CreatedAt,
+		})
+	}
+
+	for _, h := range bi.Handoffs {
+		issue.Handoffs = append(issue.Handoffs, domain.Handoff{
+			IssueID:   h.IssueID,
+			Done:      h.Done,
+			Remaining: h.Remaining,
+			Decisions: h.Decisions,
+			Uncertain: h.Uncertain,
+			CreatedAt: h.CreatedAt,
 		})
 	}
 
