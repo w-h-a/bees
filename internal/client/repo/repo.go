@@ -34,5 +34,9 @@ type Repo interface {
 	GetComments(ctx context.Context, issueID string) ([]domain.Comment, error)
 	AddComment(ctx context.Context, comment *domain.Comment) error
 
+	GetHandoffs(ctx context.Context, issueID string) ([]domain.Handoff, error)
+	GetLatestHandoff(ctx context.Context, issueID string) (*domain.Handoff, error)
+	AddHandoff(ctx context.Context, handoff *domain.Handoff) error
+
 	Close() error
 }

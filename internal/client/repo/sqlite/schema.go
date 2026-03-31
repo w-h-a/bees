@@ -1,6 +1,6 @@
 package sqlite
 
-const schemaVersion = 1
+const schemaVersion = 2
 
 const ddl = `
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -44,6 +44,16 @@ CREATE TABLE IF NOT EXISTS comments (
 	issue_id   TEXT NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
 	author     TEXT DEFAULT '',
 	body       TEXT NOT NULL,
+	created_at DATETIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS handoffs (
+	id         INTEGER PRIMARY KEY AUTOINCREMENT,
+	issue_id   TEXT NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+	done       TEXT DEFAULT '',
+	remaining  TEXT DEFAULT '',
+	decisions  TEXT DEFAULT '',
+	uncertain  TEXT DEFAULT '',
 	created_at DATETIME NOT NULL
 );
 
