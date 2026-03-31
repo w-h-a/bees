@@ -598,6 +598,67 @@ func (s *Service) DeleteIssues(ctx context.Context, filter domain.DeleteFilter) 
 	return count, nil
 }
 
+func (s *Service) Context(ctx context.Context) (*ContextSummary, error) {
+	slog.Debug("building context summary")
+
+	inProgress, err := s.ListIssues(ctx, domain.ListFilter{
+		Status: string(domain.StatusInProgress),
+		Limit:  1000,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list in-progress issues: %w", err)
+	}
+
+	ready, err := s.ReadyIssues(ctx, "", 1000)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list ready issues: %w", err)
+	}
+
+	open, err := s.ListIssues(ctx, domain.ListFilter{
+		Status: string(domain.StatusOpen),
+		Limit:  1000,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list open issues: %w", err)
+	}
+
+	readySet := make(map[string]struct{}, len(ready))
+	for _, r := range ready {
+		readySet[r.ID] = struct{}{}
+	}
+
+	now := time.Now()
+	var blocked []domain.Issue
+	for _, o := range open {
+		if _, isReady := readySet[o.ID]; isReady {
+			continue
+		}
+		if o.DeferUntil != nil && o.DeferUntil.After(now) {
+			continue
+		}
+		blocked = append(blocked, o)
+	}
+
+	since := now.AddDate(0, 0, -7)
+	recentlyDone, err := s.ListIssues(ctx, domain.ListFilter{
+		Status: string(domain.StatusClosed),
+		Since:  &since,
+		Limit:  1000,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list recently closed issues: %w", err)
+	}
+
+	slog.Debug("context summary built", "in_progress", len(inProgress), "ready", len(ready), "blocked", len(blocked), "recently_done", len(recentlyDone))
+
+	return &ContextSummary{
+		InProgress:   inProgress,
+		Ready:        ready,
+		Blocked:      blocked,
+		RecentlyDone: recentlyDone,
+	}, nil
+}
+
 func (s *Service) ReadyIssues(ctx context.Context, sort string, limit int) ([]domain.Issue, error) {
 	if sort == "" {
 		sort = "priority"

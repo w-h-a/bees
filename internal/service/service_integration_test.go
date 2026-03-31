@@ -1362,6 +1362,127 @@ func TestPreviewThenDelete_ConsistentCounts(t *testing.T) {
 	require.Equal(t, 3, count)
 }
 
+func TestContext_empty(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	// Act
+	summary, err := svc.Context(ctx)
+	require.NoError(t, err)
+
+	// Assert: all buckets empty
+	require.Empty(t, summary.InProgress)
+	require.Empty(t, summary.Ready)
+	require.Empty(t, summary.Blocked)
+	require.Empty(t, summary.RecentlyDone)
+}
+
+func TestContext_categorizes(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	// in_progress issue
+	ipID, err := svc.CreateIssue(ctx, &domain.Issue{Title: "In progress task"})
+	require.NoError(t, err)
+	ipStatus := domain.StatusInProgress
+	_, err = svc.UpdateIssue(ctx, ipID, domain.IssueUpdate{Status: &ipStatus})
+	require.NoError(t, err)
+
+	// ready issue (open, unblocked, undeferred)
+	readyID, err := svc.CreateIssue(ctx, &domain.Issue{Title: "Ready task"})
+	require.NoError(t, err)
+
+	// blocked issue (open, has unresolved blocker)
+	blockerID, err := svc.CreateIssue(ctx, &domain.Issue{Title: "Blocker"})
+	require.NoError(t, err)
+	blockedID, err := svc.CreateIssue(ctx, &domain.Issue{Title: "Blocked task"})
+	require.NoError(t, err)
+	_, _, err = svc.AddDependency(ctx, blockerID, blockedID)
+	require.NoError(t, err)
+
+	// recently closed issue
+	doneID, err := svc.CreateIssue(ctx, &domain.Issue{Title: "Done task"})
+	require.NoError(t, err)
+	_, _, err = svc.CloseIssue(ctx, doneID)
+	require.NoError(t, err)
+
+	// deferred issue (open, no blockers, deferred to the future)
+	deferredID, err := svc.CreateIssue(ctx, &domain.Issue{Title: "Deferred task"})
+	require.NoError(t, err)
+	future := time.Now().AddDate(0, 0, 7)
+	_, err = svc.UpdateIssue(ctx, deferredID, domain.IssueUpdate{DeferUntil: &future})
+	require.NoError(t, err)
+
+	// Act
+	summary, err := svc.Context(ctx)
+	require.NoError(t, err)
+
+	// Assert: in_progress bucket
+	require.Len(t, summary.InProgress, 1)
+	require.Equal(t, ipID, summary.InProgress[0].ID)
+
+	// Assert: ready bucket — readyID and blockerID are both open+unblocked+undeferred
+	readyIDs := map[string]bool{}
+	for _, r := range summary.Ready {
+		readyIDs[r.ID] = true
+	}
+	require.True(t, readyIDs[readyID])
+	require.True(t, readyIDs[blockerID])
+	require.False(t, readyIDs[blockedID])
+
+	// Assert: blocked bucket — only dependency-blocked, not deferred
+	blockedIDs := map[string]bool{}
+	for _, b := range summary.Blocked {
+		blockedIDs[b.ID] = true
+	}
+	require.True(t, blockedIDs[blockedID])
+	require.False(t, blockedIDs[deferredID], "deferred issues should not appear in Blocked")
+
+	// Assert: recent done bucket
+	require.Len(t, summary.RecentlyDone, 1)
+	require.Equal(t, doneID, summary.RecentlyDone[0].ID)
+}
+
+func TestContext_includes_handoffs(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	id, err := svc.CreateIssue(ctx, &domain.Issue{Title: "Handoff context task"})
+	require.NoError(t, err)
+
+	ipStatus := domain.StatusInProgress
+	_, err = svc.UpdateIssue(ctx, id, domain.IssueUpdate{Status: &ipStatus})
+	require.NoError(t, err)
+
+	_, err = svc.AddHandoff(ctx, id, "finished parsing", "need tests", "chose YAML", "error strategy")
+	require.NoError(t, err)
+
+	// Act
+	summary, err := svc.Context(ctx)
+	require.NoError(t, err)
+
+	// Assert: in_progress issue has handoff populated
+	require.Len(t, summary.InProgress, 1)
+	require.Equal(t, id, summary.InProgress[0].ID)
+	require.Len(t, summary.InProgress[0].Handoffs, 1)
+	require.Equal(t, "finished parsing", summary.InProgress[0].Handoffs[0].Done)
+}
+
 func TestReadyIssues_ExcludesDeferredAndClosed(t *testing.T) {
 	if os.Getenv("INTEGRATION") == "" {
 		t.Skip("set INTEGRATION=1 to run")
