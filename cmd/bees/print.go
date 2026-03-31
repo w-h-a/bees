@@ -113,6 +113,39 @@ func printIssue(issue *domain.Issue) {
 			fmt.Println()
 		}
 	}
+
+	if len(issue.Handoffs) > 0 {
+		fmt.Println()
+		fmt.Printf("%s\n", sectionStyle.Render("Handoffs"))
+		for _, h := range issue.Handoffs {
+			ts := dimStyle.Render(h.CreatedAt.Format("2006-01-02 15:04"))
+			fmt.Printf("  %s\n", ts)
+
+			sections := []struct {
+				label string
+				body  string
+			}{
+				{"Done", h.Done},
+				{"Remaining", h.Remaining},
+				{"Decisions", h.Decisions},
+				{"Uncertain", h.Uncertain},
+			}
+
+			for _, s := range sections {
+				if strings.TrimSpace(s.body) == "" {
+					continue
+				}
+				for i, line := range strings.Split(s.body, "\n") {
+					if i == 0 {
+						fmt.Printf("    %s %s\n", dimStyle.Render(s.label+":"), line)
+						continue
+					}
+					fmt.Printf("      %s\n", line)
+				}
+			}
+			fmt.Println()
+		}
+	}
 }
 
 func printContextSummary(s *service.ContextSummary) {
