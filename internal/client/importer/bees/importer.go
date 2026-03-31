@@ -1,4 +1,4 @@
-package beads
+package bees
 
 import (
 	"bufio"
@@ -10,11 +10,11 @@ import (
 	"github.com/w-h-a/bees/internal/domain"
 )
 
-type beadsImporter struct {
+type beesImporter struct {
 	options importer.Options
 }
 
-func (b *beadsImporter) Parse(r io.Reader) ([]domain.Issue, error) {
+func (b *beesImporter) Parse(r io.Reader) ([]domain.Issue, error) {
 	var issues []domain.Issue
 
 	scanner := bufio.NewScanner(r)
@@ -28,7 +28,7 @@ func (b *beadsImporter) Parse(r io.Reader) ([]domain.Issue, error) {
 			continue
 		}
 
-		var bi beadsIssue
+		var bi beesIssue
 		if err := json.Unmarshal(line, &bi); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal line %d: %w", lineNum, err)
 		}
@@ -42,7 +42,7 @@ func (b *beadsImporter) Parse(r io.Reader) ([]domain.Issue, error) {
 func NewImporter(opts ...importer.Option) (importer.Importer, error) {
 	options := importer.NewOptions(opts...)
 
-	i := &beadsImporter{
+	i := &beesImporter{
 		options: options,
 	}
 

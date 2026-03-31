@@ -47,5 +47,17 @@ func mapFromIssue(issue domain.Issue) jsonlIssue {
 		})
 	}
 
+	for _, h := range issue.Handoffs {
+		ji.Handoffs = append(ji.Handoffs, jsonlHandoff{
+			ID:        h.ID,
+			IssueID:   h.IssueID,
+			Done:      h.Done,
+			Remaining: h.Remaining,
+			Decisions: h.Decisions,
+			Uncertain: h.Uncertain,
+			CreatedAt: h.CreatedAt,
+		})
+	}
+
 	return ji
 }
