@@ -1483,6 +1483,51 @@ func TestContext_includes_handoffs(t *testing.T) {
 	require.Equal(t, "finished parsing", summary.InProgress[0].Handoffs[0].Done)
 }
 
+func TestContext_blocked_in_progress(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	// Create two in_progress issues where B is blocked by A.
+	aID, err := svc.CreateIssue(ctx, &domain.Issue{Title: "Task A"})
+	require.NoError(t, err)
+	ipStatus := domain.StatusInProgress
+	_, err = svc.UpdateIssue(ctx, aID, domain.IssueUpdate{Status: &ipStatus})
+	require.NoError(t, err)
+
+	bID, err := svc.CreateIssue(ctx, &domain.Issue{Title: "Task B"})
+	require.NoError(t, err)
+	_, err = svc.UpdateIssue(ctx, bID, domain.IssueUpdate{Status: &ipStatus})
+	require.NoError(t, err)
+
+	_, _, err = svc.AddDependency(ctx, aID, bID) // A blocks B
+	require.NoError(t, err)
+
+	// Act
+	summary, err := svc.Context(ctx)
+	require.NoError(t, err)
+
+	// Assert: only A should be in_progress; B is blocked
+	ipIDs := map[string]bool{}
+	for _, ip := range summary.InProgress {
+		ipIDs[ip.ID] = true
+	}
+	require.True(t, ipIDs[aID], "unblocked in_progress task should appear in InProgress")
+	require.False(t, ipIDs[bID], "blocked in_progress task should not appear in InProgress")
+
+	// Assert: B should be in blocked
+	blockedIDs := map[string]bool{}
+	for _, b := range summary.Blocked {
+		blockedIDs[b.ID] = true
+	}
+	require.True(t, blockedIDs[bID], "blocked in_progress task should appear in Blocked")
+	require.False(t, blockedIDs[aID], "unblocked in_progress task should not appear in Blocked")
+}
+
 func TestReadyIssues_ExcludesDeferredAndClosed(t *testing.T) {
 	if os.Getenv("INTEGRATION") == "" {
 		t.Skip("set INTEGRATION=1 to run")

@@ -620,17 +620,42 @@ func (s *Service) Context(ctx context.Context) (*ContextSummary, error) {
 		return nil, fmt.Errorf("failed to list in-progress issues: %w", err)
 	}
 
-	ready, err := s.ReadyIssues(ctx, "", 1000)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list ready issues: %w", err)
-	}
-
 	open, err := s.ListIssues(ctx, domain.ListFilter{
 		Status: string(domain.StatusOpen),
 		Limit:  1000,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list open issues: %w", err)
+	}
+
+	activeIDs := make(map[string]struct{}, len(inProgress)+len(open))
+	for _, issue := range inProgress {
+		activeIDs[issue.ID] = struct{}{}
+	}
+	for _, issue := range open {
+		activeIDs[issue.ID] = struct{}{}
+	}
+
+	var unblocked, blockedInProgress []domain.Issue
+	for _, ip := range inProgress {
+		isBlocked := false
+		for _, dep := range ip.Dependencies {
+			if _, active := activeIDs[dep.DependsOnID]; active {
+				isBlocked = true
+				break
+			}
+		}
+
+		if isBlocked {
+			blockedInProgress = append(blockedInProgress, ip)
+		} else {
+			unblocked = append(unblocked, ip)
+		}
+	}
+
+	ready, err := s.ReadyIssues(ctx, "", 1000)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list ready issues: %w", err)
 	}
 
 	readySet := make(map[string]struct{}, len(ready))
@@ -650,6 +675,8 @@ func (s *Service) Context(ctx context.Context) (*ContextSummary, error) {
 		blocked = append(blocked, o)
 	}
 
+	blocked = append(blocked, blockedInProgress...)
+
 	since := now.AddDate(0, 0, -7)
 	recentlyDone, err := s.ListIssues(ctx, domain.ListFilter{
 		Status: string(domain.StatusClosed),
@@ -660,10 +687,10 @@ func (s *Service) Context(ctx context.Context) (*ContextSummary, error) {
 		return nil, fmt.Errorf("failed to list recently closed issues: %w", err)
 	}
 
-	slog.Debug("context summary built", "in_progress", len(inProgress), "ready", len(ready), "blocked", len(blocked), "recently_done", len(recentlyDone))
+	slog.Debug("context summary built", "in_progress", len(unblocked), "ready", len(ready), "blocked", len(blocked), "recently_done", len(recentlyDone))
 
 	return &ContextSummary{
-		InProgress:   inProgress,
+		InProgress:   unblocked,
 		Ready:        ready,
 		Blocked:      blocked,
 		RecentlyDone: recentlyDone,
