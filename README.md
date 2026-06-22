@@ -4,46 +4,109 @@
   <img src="./.github/assets/bees.png" alt="Bees Mascot" width="400" />
 </div>
 
-## Problem
+An alternative to a sea of .md files for developers who pair with agentic navigators.
 
-[Beads](https://github.com/steveyegge/beads) is a powerful alternative to a collection of .md files that grew to serve multi-agent orchestration. For a developer that likes to keep their hands on the wheel while pairing with an agentic navigator, ~80% of it is dead weight.
+## Storage model
 
-## Solution
+bees has two storage modes. v1 keeps a store per repo. v2 keeps one store per device. Which one you have depends on your installed binary.
 
-Bees follows Beads as an alternative to a sea of .md files and drops everything else.
+**v1 (per-repo).** Each repo gets its own `.bees/bees.db`. `bees init` creates it. bees finds it by walking up the directory tree. Config and the issue prefix live in that repo's `.bees/config.yaml`. So outside an initialized repo, bees has nothing to work with.
 
-## Install      
+**v2 (one store per device).** There is one store at `~/.bees/bees.db`. Set `BEES_HOME` to put it somewhere else. The store is created automatically on first use. It is reachable from any directory. There is no `bees init`, no `.bees/` directory, and no `--stealth`. You set the issue prefix per command with `--prefix` or the `BEES_PREFIX` environment variable.
 
-```sh                                                                                
-go install github.com/w-h-a/bees/cmd/bees@latest        
-```                                                                                                        
+## Install
+
+`@latest` installs the newest release. To stay on v1, pin `v1.31.1`.
+
+**v1 (per-repo):**
+
+```sh
+go install github.com/w-h-a/bees/cmd/bees@v1.31.1
+```
+
+**v2 (device-global):**
+
+```sh
+go install github.com/w-h-a/bees/cmd/bees@latest
+```
 
 ## Quick Start
 
+**v1 (per-repo):**
+
 ```sh
-bees init --prefix PROJ              # create a bees.db in the current repo
-bees create "Design auth flow" \
-  --type task --priority 2           # create an issue
-bees list --status open              # see all open issues
-bees update PROJ-xxx --assignee me   # assign and refine
-bees ready                           # what should I work on next?
+bees init --prefix PROJ   # creates .bees/bees.db in the current repo
+bees create "Design auth flow" --type task --priority 2
+```
+
+**v2 (device-global):**
+
+```sh
+# no init, the store at ~/.bees auto-creates on first use
+bees create "Design auth flow" --type task --priority 2 --prefix PROJ
+```
+
+**Either version:**
+
+```sh
+bees list --status open
+bees update PROJ-xxx --assignee me
+bees ready
 ```
 
 ## Commands
 
+Most commands are the same in both versions:
+
 ```text
-bees init [--stealth] [--prefix]     bees context
-bees create "title" [flags]          bees ready [--sort --limit]
-bees show <id>                       bees upcoming [--days --assignee]
-bees update <id> [flags]             bees search <query>
-bees close <id>                      bees dep add <id> --blocks <id>
-bees reopen <id>                     bees dep remove <id> <id>
-bees list [--status --type ...]      bees dep graph [<id>]
-bees import <file.jsonl>             bees comment <id> "text"
-bees export [-o file.jsonl]          bees handoff <id> [--done --remaining ...]
-bees delete [--closed-before --yes]  bees config set|get|list
-                                     bees version
+bees create "title" [flags]
+bees show <id>
+bees update <id> [flags]
+bees close <id>
+bees reopen <id>
+bees list [--status --type ...]
+bees search <query>
+bees delete [--closed-before --yes]
+bees dep add <id> --blocks <id>
+bees dep remove <id> <id>
+bees dep graph [<id>]
+bees comment <id> "text"
+bees handoff <id> [--done --remaining ...]
+bees import <file.jsonl>
+bees export [-o file.jsonl]
+bees context
+bees ready [--sort --limit]
+bees upcoming [--days --assignee]
+bees config set|get|list
+bees version
 ```
+
+v1 only:
+
+```text
+bees init [--stealth] [--prefix]
+```
+
+v2 only:
+
+```text
+bees migrate <repo>... [--commit]
+bees create --prefix <prefix>
+```
+
+## Migrating from v1 to v2
+
+`bees migrate` copies a repo's v1 store into the v2 device store. It reads the repo's `.bees/bees.db` and writes those issues into `~/.bees/bees.db`. It never touches the source. So your old per-repo stores stay as a fallback.
+
+```sh
+# dry run, shows what each repo would import
+bees migrate ~/repos/project-a ~/repos/project-b
+
+# write the import
+bees migrate ~/repos/project-a --commit
+```
+
+The dry run is the default. It reports what each source would add and names any ID collisions. Add `--commit` to write. Re-running with `--commit` is safe. It skips issues already in the device store. So a partial migration can resume.
 
 ## Architecture
 
