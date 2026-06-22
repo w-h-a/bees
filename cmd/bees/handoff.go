@@ -1,10 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"os"
-
 	"github.com/spf13/cobra"
 )
 
@@ -21,22 +17,7 @@ func newHandoffCmd() *cobra.Command {
 		Short: "Record a structured handoff for an issue",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			handoff, err := svc.AddHandoff(cmd.Context(), args[0], done, remaining, decisions, uncertain)
-			if err != nil {
-				return err
-			}
-
-			if !jsonOutput {
-				ts := handoff.CreatedAt.Format("2006-01-02 15:04")
-				fmt.Printf("%s %s\n", dimStyle.Render(ts), headerStyle.Render("Handoff recorded"))
-				printHandoffInline(*handoff)
-				return nil
-			}
-
-			enc := json.NewEncoder(os.Stdout)
-			enc.SetIndent("", " ")
-
-			return enc.Encode(handoff)
+			return h.Handoff(cmd.Context(), cmd.OutOrStdout(), args[0], done, remaining, decisions, uncertain)
 		},
 	}
 

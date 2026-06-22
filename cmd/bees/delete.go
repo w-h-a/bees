@@ -1,9 +1,7 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/w-h-a/bees/internal/domain"
@@ -32,55 +30,7 @@ func newDeleteCmd() *cobra.Command {
 
 			filter := domain.DeleteFilter{ClosedBefore: cutoff}
 
-			if !yes {
-				candidates, err := svc.PreviewDeleteIssues(cmd.Context(), filter)
-				if err != nil {
-					return err
-				}
-
-				if jsonOutput {
-					enc := json.NewEncoder(os.Stdout)
-					enc.SetIndent("", " ")
-					return enc.Encode(candidates)
-				}
-
-				for i, c := range candidates {
-					if i >= 20 {
-						fmt.Printf("... and %d more\n", len(candidates)-20)
-						break
-					}
-					title := c.Title
-					if len(title) > 50 {
-						title = title[:47] + "..."
-					}
-					closedAt := ""
-					if c.ClosedAt != nil {
-						closedAt = c.ClosedAt.Format("2006-01-02")
-					}
-					fmt.Printf("  %s  %-12s  %s\n", c.ID, closedAt, title)
-				}
-
-				fmt.Printf("Would delete %d issues closed before %s. Run with --yes to confirm.\n",
-					len(candidates), cutoff.Format("2006-01-02"))
-
-				return nil
-			}
-
-			count, err := svc.DeleteIssues(cmd.Context(), filter)
-			if err != nil {
-				return err
-			}
-
-			if jsonOutput {
-				enc := json.NewEncoder(os.Stdout)
-				enc.SetIndent("", " ")
-				return enc.Encode(map[string]any{"deleted": count})
-			}
-
-			fmt.Printf("Deleted %d issues closed before %s.\n",
-				count, cutoff.Format("2006-01-02"))
-
-			return nil
+			return h.Delete(cmd.Context(), cmd.OutOrStdout(), filter, yes)
 		},
 	}
 

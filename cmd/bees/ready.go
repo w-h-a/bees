@@ -1,9 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"os"
-
 	"github.com/spf13/cobra"
 )
 
@@ -18,20 +15,7 @@ func newReadyCmd() *cobra.Command {
 		Short: "Show issues ready to work on",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			issues, err := svc.ReadyIssues(cmd.Context(), sort, limit)
-			if err != nil {
-				return err
-			}
-
-			if !jsonOutput {
-				printIssueTable(issues)
-				return nil
-			}
-
-			enc := json.NewEncoder(os.Stdout)
-			enc.SetIndent("", " ")
-
-			return enc.Encode(issues)
+			return h.Ready(cmd.Context(), cmd.OutOrStdout(), sort, limit)
 		},
 	}
 
