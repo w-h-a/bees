@@ -1,11 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"os"
-	"strings"
-
 	"github.com/spf13/cobra"
 )
 
@@ -20,29 +15,7 @@ func newCommentCmd(cfg **config) *cobra.Command {
 			if author == "" && *cfg != nil {
 				author, _ = resolveConfig(*cfg, "author")
 			}
-
-			comment, err := svc.AddComment(cmd.Context(), args[0], author, args[1])
-			if err != nil {
-				return err
-			}
-
-			if !jsonOutput {
-				name := comment.Author
-				if name == "" {
-					name = "anonymous"
-				}
-				ts := comment.CreatedAt.Format("2006-01-02 15:04")
-				fmt.Printf("%s %s\n", dimStyle.Render(ts), headerStyle.Render(name))
-				for line := range strings.SplitSeq(comment.Body, "\n") {
-					fmt.Printf("  %s\n", line)
-				}
-				return nil
-			}
-
-			enc := json.NewEncoder(os.Stdout)
-			enc.SetIndent("", " ")
-
-			return enc.Encode(comment)
+			return h.Comment(cmd.Context(), cmd.OutOrStdout(), args[0], author, args[1])
 		},
 	}
 

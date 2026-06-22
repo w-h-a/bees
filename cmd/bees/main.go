@@ -13,6 +13,7 @@ import (
 	noopimporter "github.com/w-h-a/bees/internal/client/importer/noop"
 	"github.com/w-h-a/bees/internal/client/repo"
 	"github.com/w-h-a/bees/internal/client/repo/sqlite"
+	"github.com/w-h-a/bees/internal/handler/cli"
 	"github.com/w-h-a/bees/internal/service"
 )
 
@@ -20,6 +21,7 @@ var (
 	jsonOutput bool
 	verbose    bool
 	svc        *service.Service
+	h          *cli.Handler
 	dbCloser   func() error
 )
 
@@ -95,34 +97,34 @@ func newRootCmd() *cobra.Command {
 				"bees comment":    true,
 				"bees handoff":    true,
 			}
-			if !needsDB[cmd.CommandPath()] {
-				return nil
-			}
-
-			dbPath := filepath.Join(beesDir, "bees.db")
-			r, err := sqlite.NewRepo(repo.WithLocation(dbPath))
-			if err != nil {
-				return fmt.Errorf("failed to open database: %w", err)
-			}
-			dbCloser = r.Close
-
-			i, _ := noopimporter.NewImporter()
-			if cmd.CommandPath() == "bees import" {
-				i, err = bees.NewImporter()
+			if needsDB[cmd.CommandPath()] {
+				dbPath := filepath.Join(beesDir, "bees.db")
+				r, err := sqlite.NewRepo(repo.WithLocation(dbPath))
 				if err != nil {
-					return fmt.Errorf("failed to initialize importer: %w", err)
+					return fmt.Errorf("failed to open database: %w", err)
 				}
+				dbCloser = r.Close
+
+				i, _ := noopimporter.NewImporter()
+				if cmd.CommandPath() == "bees import" {
+					i, err = bees.NewImporter()
+					if err != nil {
+						return fmt.Errorf("failed to initialize importer: %w", err)
+					}
+				}
+
+				e, _ := noopexporter.NewExporter()
+				if cmd.CommandPath() == "bees export" {
+					e, err = jsonl.NewExporter()
+					if err != nil {
+						return fmt.Errorf("failed to initialize exporter: %w", err)
+					}
+				}
+
+				svc = service.NewService(r, i, e, prefix)
 			}
 
-			e, _ := noopexporter.NewExporter()
-			if cmd.CommandPath() == "bees export" {
-				e, err = jsonl.NewExporter()
-				if err != nil {
-					return fmt.Errorf("failed to initialize exporter: %w", err)
-				}
-			}
-
-			svc = service.NewService(r, i, e, prefix)
+			h = cli.New(svc, jsonOutput)
 
 			return nil
 		},

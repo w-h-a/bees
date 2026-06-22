@@ -1,9 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"os"
-
 	"github.com/spf13/cobra"
 )
 
@@ -15,20 +12,7 @@ func newSearchCmd() *cobra.Command {
 		Short: "Search issues by title or description",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			issues, err := svc.SearchIssues(cmd.Context(), args[0], limit)
-			if err != nil {
-				return err
-			}
-
-			if !jsonOutput {
-				printIssueTable(issues)
-				return nil
-			}
-
-			enc := json.NewEncoder(os.Stdout)
-			enc.SetIndent("", " ")
-
-			return enc.Encode(issues)
+			return h.Search(cmd.Context(), cmd.OutOrStdout(), args[0], limit)
 		},
 	}
 

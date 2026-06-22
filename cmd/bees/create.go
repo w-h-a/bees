@@ -1,10 +1,8 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 	"time"
 
@@ -83,31 +81,7 @@ func newCreateCmd() *cobra.Command {
 				issue.DueAt = &t
 			}
 
-			id, err := svc.CreateIssue(cmd.Context(), &issue)
-			if err != nil {
-				return err
-			}
-
-			if !jsonOutput {
-				fmt.Printf("Created %s: %s\n", id, issue.Title)
-				return nil
-			}
-
-			enc := json.NewEncoder(os.Stdout)
-			enc.SetIndent("", " ")
-
-			out := map[string]any{
-				"id":     id,
-				"title":  issue.Title,
-				"type":   string(issue.Type),
-				"status": string(issue.Status),
-			}
-
-			if issue.Priority != nil {
-				out["priority"] = *issue.Priority
-			}
-
-			return enc.Encode(out)
+			return h.Create(cmd.Context(), cmd.OutOrStdout(), &issue)
 		},
 	}
 

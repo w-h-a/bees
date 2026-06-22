@@ -77,7 +77,6 @@ bees export [-o file.jsonl]
 bees context
 bees ready [--sort --limit]
 bees upcoming [--days --assignee]
-bees config set|get|list
 bees version
 ```
 
@@ -85,6 +84,7 @@ v1 only:
 
 ```text
 bees init [--stealth] [--prefix]
+bees config set|get|list
 ```
 
 v2 only:

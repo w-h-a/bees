@@ -1,10 +1,8 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -101,20 +99,7 @@ func newUpdateCmd() *cobra.Command {
 				update.DueAt = &t
 			}
 
-			issue, err := svc.UpdateIssue(cmd.Context(), args[0], update)
-			if err != nil {
-				return err
-			}
-
-			if !jsonOutput {
-				fmt.Printf("Updated %s: %s\n", issue.ID, issue.Title)
-				return nil
-			}
-
-			enc := json.NewEncoder(os.Stdout)
-			enc.SetIndent("", " ")
-
-			return enc.Encode(issue)
+			return h.Update(cmd.Context(), cmd.OutOrStdout(), args[0], update)
 		},
 	}
 

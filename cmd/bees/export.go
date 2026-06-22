@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -29,7 +30,7 @@ func newExportCmd() *cobra.Command {
 				Label:    label,
 			}
 
-			w := os.Stdout
+			var dest io.Writer = cmd.OutOrStdout()
 
 			if output != "" {
 				f, err := os.Create(output)
@@ -37,18 +38,10 @@ func newExportCmd() *cobra.Command {
 					return fmt.Errorf("failed to create output file: %w", err)
 				}
 				defer f.Close()
-				w = f
+				dest = f
 			}
 
-			if err := svc.ExportIssues(cmd.Context(), w, filter); err != nil {
-				return err
-			}
-
-			if output != "" {
-				fmt.Printf("Exported to %s\n", output)
-			}
-
-			return nil
+			return h.Export(cmd.Context(), cmd.OutOrStdout(), dest, filter, output)
 		},
 	}
 

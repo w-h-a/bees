@@ -1,7 +1,8 @@
-package main
+package cli
 
 import (
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 
@@ -33,102 +34,102 @@ var (
 	sectionStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15"))
 )
 
-func printIssue(issue *domain.Issue) {
+func printIssue(w io.Writer, issue *domain.Issue) {
 	statusStyle := statusColors[issue.Status]
 	statusBadge := statusStyle.Render(string(issue.Status))
 	typeBadge := dimStyle.Render(string(issue.Type))
 
-	fmt.Printf("%s %s %s\n", statusBadge, typeBadge, headerStyle.Render(issue.ID))
+	fmt.Fprintf(w, "%s %s %s\n", statusBadge, typeBadge, headerStyle.Render(issue.ID))
 
-	fmt.Printf("%s\n\n", headerStyle.Render(issue.Title))
+	fmt.Fprintf(w, "%s\n\n", headerStyle.Render(issue.Title))
 
 	if issue.Priority != nil {
 		label := priorityLabels[*issue.Priority]
-		fmt.Printf("  Priority:  %s\n", label)
+		fmt.Fprintf(w, "  Priority:  %s\n", label)
 	}
 
 	if issue.Assignee != "" {
-		fmt.Printf("  Assignee:  %s\n", issue.Assignee)
+		fmt.Fprintf(w, "  Assignee:  %s\n", issue.Assignee)
 	}
 
 	if issue.EstimateMins > 0 {
-		fmt.Printf("  Estimate:  %d min\n", issue.EstimateMins)
+		fmt.Fprintf(w, "  Estimate:  %d min\n", issue.EstimateMins)
 	}
 
 	if issue.ParentID != nil {
-		fmt.Printf("  Parent:    %s\n", *issue.ParentID)
+		fmt.Fprintf(w, "  Parent:    %s\n", *issue.ParentID)
 	}
 
 	if issue.DeferUntil != nil {
-		fmt.Printf("  Deferred:  %s\n", issue.DeferUntil.Format("2006-01-02"))
+		fmt.Fprintf(w, "  Deferred:  %s\n", issue.DeferUntil.Format("2006-01-02"))
 	}
 
 	if issue.DueAt != nil {
-		fmt.Printf("  Due:       %s\n", issue.DueAt.Format("2006-01-02"))
+		fmt.Fprintf(w, "  Due:       %s\n", issue.DueAt.Format("2006-01-02"))
 	}
 
-	fmt.Printf("  Created:   %s\n", issue.CreatedAt.Format("2006-01-02 15:04"))
-	fmt.Printf("  Updated:   %s\n", issue.UpdatedAt.Format("2006-01-02 15:04"))
+	fmt.Fprintf(w, "  Created:   %s\n", issue.CreatedAt.Format("2006-01-02 15:04"))
+	fmt.Fprintf(w, "  Updated:   %s\n", issue.UpdatedAt.Format("2006-01-02 15:04"))
 
 	if issue.ClosedAt != nil {
-		fmt.Printf("  Closed:    %s\n", issue.ClosedAt.Format("2006-01-02 15:04"))
+		fmt.Fprintf(w, "  Closed:    %s\n", issue.ClosedAt.Format("2006-01-02 15:04"))
 	}
 
 	if len(issue.Labels) > 0 {
-		fmt.Println()
-		fmt.Printf("%s\n", sectionStyle.Render("Labels"))
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "%s\n", sectionStyle.Render("Labels"))
 		for _, l := range issue.Labels {
-			fmt.Printf("  %s\n", labelStyle.Render(l))
+			fmt.Fprintf(w, "  %s\n", labelStyle.Render(l))
 		}
 	}
 
 	if len(issue.Dependencies) > 0 {
-		fmt.Println()
-		fmt.Printf("%s\n", sectionStyle.Render("Depends on"))
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "%s\n", sectionStyle.Render("Depends on"))
 		for _, d := range issue.Dependencies {
-			fmt.Printf("  → %s\n", d.DependsOnID)
+			fmt.Fprintf(w, "  → %s\n", d.DependsOnID)
 		}
 	}
 
 	if issue.Description != "" {
-		fmt.Println()
-		fmt.Printf("%s\n", sectionStyle.Render("Description"))
-		fmt.Printf("%s\n", issue.Description)
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "%s\n", sectionStyle.Render("Description"))
+		fmt.Fprintf(w, "%s\n", issue.Description)
 	}
 
 	if len(issue.Comments) > 0 {
-		fmt.Println()
-		fmt.Printf("%s\n", sectionStyle.Render("Comments"))
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "%s\n", sectionStyle.Render("Comments"))
 		for _, c := range issue.Comments {
 			author := c.Author
 			if author == "" {
 				author = "anonymous"
 			}
 			ts := dimStyle.Render(c.CreatedAt.Format("2006-01-02 15:04"))
-			fmt.Printf("  %s %s\n", ts, headerStyle.Render(author))
+			fmt.Fprintf(w, "  %s %s\n", ts, headerStyle.Render(author))
 
 			for _, line := range strings.Split(c.Body, "\n") {
-				fmt.Printf("    %s\n", line)
+				fmt.Fprintf(w, "    %s\n", line)
 			}
-			fmt.Println()
+			fmt.Fprintln(w)
 		}
 	}
 
 	if len(issue.Handoffs) > 0 {
-		fmt.Println()
-		fmt.Printf("%s\n", sectionStyle.Render("Handoffs"))
-		for _, h := range issue.Handoffs {
-			ts := dimStyle.Render(h.CreatedAt.Format("2006-01-02 15:04"))
-			fmt.Printf("  %s\n", ts)
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "%s\n", sectionStyle.Render("Handoffs"))
+		for _, hf := range issue.Handoffs {
+			ts := dimStyle.Render(hf.CreatedAt.Format("2006-01-02 15:04"))
+			fmt.Fprintf(w, "  %s\n", ts)
 
 			sections := []struct {
 				label string
 				body  string
 			}{
-				{"Done", h.Done},
-				{"Remaining", h.Remaining},
-				{"Decisions", h.Decisions},
-				{"Uncertain", h.Uncertain},
+				{"Done", hf.Done},
+				{"Remaining", hf.Remaining},
+				{"Decisions", hf.Decisions},
+				{"Uncertain", hf.Uncertain},
 			}
 
 			for _, s := range sections {
@@ -137,36 +138,36 @@ func printIssue(issue *domain.Issue) {
 				}
 				for i, line := range strings.Split(s.body, "\n") {
 					if i == 0 {
-						fmt.Printf("    %s %s\n", dimStyle.Render(s.label+":"), line)
+						fmt.Fprintf(w, "    %s %s\n", dimStyle.Render(s.label+":"), line)
 						continue
 					}
-					fmt.Printf("      %s\n", line)
+					fmt.Fprintf(w, "      %s\n", line)
 				}
 			}
-			fmt.Println()
+			fmt.Fprintln(w)
 		}
 	}
 }
 
-func printContextSummary(s *service.ContextSummary) {
+func printContextSummary(w io.Writer, s *service.ContextSummary) {
 	printed := false
 
-	printed = printContextSection("In Progress", s.InProgress, true, printed)
-	printed = printContextSection("Ready", s.Ready, false, printed)
-	printed = printContextSection("Blocked", s.Blocked, false, printed)
-	printContextSection("Recently Done", s.RecentlyDone, false, printed)
+	printed = printContextSection(w, "In Progress", s.InProgress, true, printed)
+	printed = printContextSection(w, "Ready", s.Ready, false, printed)
+	printed = printContextSection(w, "Blocked", s.Blocked, false, printed)
+	printContextSection(w, "Recently Done", s.RecentlyDone, false, printed)
 }
 
-func printContextSection(header string, issues []domain.Issue, showHandoffs bool, preceded bool) bool {
+func printContextSection(w io.Writer, header string, issues []domain.Issue, showHandoffs bool, preceded bool) bool {
 	if len(issues) == 0 {
 		return preceded
 	}
 
 	if preceded {
-		fmt.Println()
+		fmt.Fprintln(w)
 	}
 
-	fmt.Println(sectionStyle.Render(header))
+	fmt.Fprintln(w, sectionStyle.Render(header))
 
 	for _, issue := range issues {
 		pri := "P2"
@@ -188,20 +189,20 @@ func printContextSection(header string, issues []domain.Issue, showHandoffs bool
 			est = dimStyle.Render(fmt.Sprintf("  %dm", issue.EstimateMins))
 		}
 
-		fmt.Printf("  %-14s %-4s %s %s %s%s\n", issue.ID, pri, typeStr, statusStr, title, est)
+		fmt.Fprintf(w, "  %-14s %-4s %s %s %s%s\n", issue.ID, pri, typeStr, statusStr, title, est)
 
 		if !showHandoffs || len(issue.Handoffs) == 0 {
 			continue
 		}
 
 		latest := issue.Handoffs[len(issue.Handoffs)-1]
-		printHandoffInline(latest)
+		printHandoffInline(w, latest)
 	}
 
 	return true
 }
 
-func printHandoffInline(h domain.Handoff) {
+func printHandoffInline(w io.Writer, h domain.Handoff) {
 	sections := []struct {
 		label string
 		body  string
@@ -217,17 +218,17 @@ func printHandoffInline(h domain.Handoff) {
 			continue
 		}
 
-		fmt.Printf("    %s %s\n", dimStyle.Render(s.label+":"), s.body)
+		fmt.Fprintf(w, "    %s %s\n", dimStyle.Render(s.label+":"), s.body)
 	}
 }
 
-func printIssueTable(issues []domain.Issue) {
+func printIssueTable(w io.Writer, issues []domain.Issue) {
 	if len(issues) == 0 {
-		fmt.Println("No issues found.")
+		fmt.Fprintln(w, "No issues found.")
 		return
 	}
 
-	fmt.Printf("%s %s %s %s %s\n",
+	fmt.Fprintf(w, "%s %s %s %s %s\n",
 		dimStyle.Render(fmt.Sprintf("%-14s", "ID")),
 		dimStyle.Render(fmt.Sprintf("%-4s", "PRI")),
 		dimStyle.Render(fmt.Sprintf("%-10s", "TYPE")),
@@ -255,15 +256,15 @@ func printIssueTable(issues []domain.Issue) {
 			est = dimStyle.Render(fmt.Sprintf("  %dm", issue.EstimateMins))
 		}
 
-		fmt.Printf("%-14s %-4s %s %s %s%s\n", issue.ID, pri, typeStr, statusStr, title, est)
+		fmt.Fprintf(w, "%-14s %-4s %s %s %s%s\n", issue.ID, pri, typeStr, statusStr, title, est)
 	}
 
-	fmt.Printf("\n%s\n", dimStyle.Render(fmt.Sprintf("%d issue(s)", len(issues))))
+	fmt.Fprintf(w, "\n%s\n", dimStyle.Render(fmt.Sprintf("%d issue(s)", len(issues))))
 }
 
-func printUpcomingTable(issues []domain.Issue) {
+func printUpcomingTable(w io.Writer, issues []domain.Issue) {
 	if len(issues) == 0 {
-		fmt.Println("No upcoming issues.")
+		fmt.Fprintln(w, "No upcoming issues.")
 		return
 	}
 
@@ -277,9 +278,9 @@ func printUpcomingTable(issues []domain.Issue) {
 
 		if dateStr != currentDate {
 			if currentDate != "" {
-				fmt.Println()
+				fmt.Fprintln(w)
 			}
-			fmt.Println(headerStyle.Render(dateStr))
+			fmt.Fprintln(w, headerStyle.Render(dateStr))
 			currentDate = dateStr
 		}
 
@@ -306,15 +307,15 @@ func printUpcomingTable(issues []domain.Issue) {
 			est = dimStyle.Render(fmt.Sprintf("  %dm", issue.EstimateMins))
 		}
 
-		fmt.Printf("  %s %-4s %s %-14s %s%s\n", bullet, pri, typeStr, issue.ID, title, est)
+		fmt.Fprintf(w, "  %s %-4s %s %-14s %s%s\n", bullet, pri, typeStr, issue.ID, title, est)
 	}
 
-	fmt.Printf("\n%s\n", dimStyle.Render(fmt.Sprintf("%d issue(s)", len(issues))))
+	fmt.Fprintf(w, "\n%s\n", dimStyle.Render(fmt.Sprintf("%d issue(s)", len(issues))))
 }
 
-func printGraph(g domain.Graph) {
+func printGraph(w io.Writer, g domain.Graph) {
 	if len(g.Nodes) == 0 {
-		fmt.Println("No dependencies found.")
+		fmt.Fprintln(w, "No dependencies found.")
 		return
 	}
 
@@ -353,7 +354,7 @@ func printGraph(g domain.Graph) {
 			estStr = dimStyle.Render(fmt.Sprintf("  %dm", n.EstimateMins))
 		}
 
-		fmt.Printf("%s%s%s %s %s%s%s\n", prefix, connector, statusStyle.Render(id), typeStr, n.Title, deferStr, estStr)
+		fmt.Fprintf(w, "%s%s%s %s %s%s%s\n", prefix, connector, statusStyle.Render(id), typeStr, n.Title, deferStr, estStr)
 
 		next := prefix + "│   "
 		if last {
@@ -381,7 +382,7 @@ func printGraph(g domain.Graph) {
 			estStr = dimStyle.Render(fmt.Sprintf("  %dm", n.EstimateMins))
 		}
 
-		fmt.Printf("%s %s %s%s%s\n", statusStyle.Render(root), typeStr, n.Title, deferStr, estStr)
+		fmt.Fprintf(w, "%s %s %s%s%s\n", statusStyle.Render(root), typeStr, n.Title, deferStr, estStr)
 
 		kids := children[root]
 		sort.Strings(kids)
@@ -390,9 +391,9 @@ func printGraph(g domain.Graph) {
 		}
 
 		if i < len(roots)-1 {
-			fmt.Println()
+			fmt.Fprintln(w)
 		}
 	}
 
-	fmt.Printf("\n%s\n", dimStyle.Render(fmt.Sprintf("%d node(s), %d edge(s)", len(g.Nodes), len(g.Edges))))
+	fmt.Fprintf(w, "\n%s\n", dimStyle.Render(fmt.Sprintf("%d node(s), %d edge(s)", len(g.Nodes), len(g.Edges))))
 }

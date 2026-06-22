@@ -1,9 +1,7 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/w-h-a/bees/internal/domain"
@@ -45,20 +43,7 @@ func newListCmd() *cobra.Command {
 				filter.Since = &t
 			}
 
-			issues, err := svc.ListIssues(cmd.Context(), filter)
-			if err != nil {
-				return err
-			}
-
-			if !jsonOutput {
-				printIssueTable(issues)
-				return nil
-			}
-
-			enc := json.NewEncoder(os.Stdout)
-			enc.SetIndent("", " ")
-
-			return enc.Encode(issues)
+			return h.List(cmd.Context(), cmd.OutOrStdout(), filter)
 		},
 	}
 
