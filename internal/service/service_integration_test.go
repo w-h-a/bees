@@ -14,6 +14,7 @@ import (
 	noopimporter "github.com/w-h-a/bees/internal/client/importer/noop"
 	"github.com/w-h-a/bees/internal/client/repo"
 	"github.com/w-h-a/bees/internal/client/repo/sqlite"
+	sqlitesource "github.com/w-h-a/bees/internal/client/source/sqlite"
 	"github.com/w-h-a/bees/internal/domain"
 )
 
@@ -2411,6 +2412,129 @@ func TestConcurrentWrites_NoLockError(t *testing.T) {
 	}
 }
 
+func TestPlanMigration_ReportsPerSourceCounts(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	repoA := seedSource(t,
+		domain.Issue{
+			ID:           "a-0001",
+			Title:        "Alpha one",
+			Labels:       []string{"backend", "v1"},
+			Comments:     []domain.Comment{{IssueID: "a-0001", Body: "c1"}, {IssueID: "a-0001", Body: "c2"}},
+			Handoffs:     []domain.Handoff{{IssueID: "a-0001", Done: "x"}},
+			Dependencies: []domain.Dependency{{IssueID: "a-0001", DependsOnID: "a-0002"}},
+		},
+		domain.Issue{ID: "a-0002", Title: "Alpha two"},
+	)
+
+	repoB := seedSource(t,
+		domain.Issue{ID: "b-0001", Title: "Beta one", Labels: []string{"api"}},
+	)
+
+	missingTarget := filepath.Join(t.TempDir(), "bees.db")
+
+	// Act
+	report, err := svc.PlanMigration(ctx, missingTarget, []string{repoA, repoB})
+	require.NoError(t, err)
+
+	// Assert
+	require.Equal(t, []domain.SourceCounts{
+		{Path: repoA, Issues: 2, Comments: 2, Handoffs: 1, Deps: 1, Labels: 2},
+		{Path: repoB, Issues: 1, Labels: 1},
+	}, report.Sources)
+	require.Empty(t, report.Skipped)
+	require.Empty(t, report.Collisions)
+}
+
+func TestPlanMigration_SurfacesSourceVsTargetCollision(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange: the target store already holds shared-0001 ...
+	targetRoot := seedSource(t, domain.Issue{ID: "shared-0001", Title: "Already in target"})
+	targetDB := filepath.Join(targetRoot, ".bees", "bees.db")
+
+	// ... and a source carries the same full ID
+	repoA := seedSource(t,
+		domain.Issue{ID: "shared-0001", Title: "Also here"},
+		domain.Issue{ID: "a-0002", Title: "Unique"},
+	)
+
+	svc := setupService(t)
+	ctx := context.Background()
+
+	// Act
+	report, err := svc.PlanMigration(ctx, targetDB, []string{repoA})
+	require.NoError(t, err)
+
+	// Assert
+	require.Equal(t, []string{"shared-0001"}, report.Collisions)
+}
+
+func TestPlanMigration_SkipsSourceWithNoStore(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange: one real source, one repo path that was never a bees project
+	repoA := seedSource(t, domain.Issue{ID: "a-0001", Title: "Alpha"})
+	missingRepo := t.TempDir() // a dir, but no .bees/bees.db
+
+	svc := setupService(t)
+	ctx := context.Background()
+	missingTarget := filepath.Join(t.TempDir(), "bees.db")
+
+	// Act
+	report, err := svc.PlanMigration(ctx, missingTarget, []string{repoA, missingRepo})
+	require.NoError(t, err)
+
+	// Assert: run succeeds; missing repo reported as skipped, real source still counted
+	require.Equal(t, []string{missingRepo}, report.Skipped)
+	require.Equal(t, []domain.SourceCounts{
+		{Path: repoA, Issues: 1},
+	}, report.Sources)
+	require.Empty(t, report.Collisions)
+}
+
+func TestPlanMigration_DoesNotMutateSource(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	repoA := seedSource(t,
+		domain.Issue{
+			ID:       "a-0001",
+			Title:    "Alpha",
+			Labels:   []string{"x"},
+			Comments: []domain.Comment{{IssueID: "a-0001", Body: "c"}},
+		},
+	)
+	beesDir := filepath.Join(repoA, ".bees")
+
+	before := beesDirSnapshot(t, beesDir)
+
+	svc := setupService(t)
+	ctx := context.Background()
+	missingTarget := filepath.Join(t.TempDir(), "bees.db")
+
+	// Act
+	_, err := svc.PlanMigration(ctx, missingTarget, []string{repoA})
+	require.NoError(t, err)
+
+	// Assert: source dir byte-for-byte unchanged — no schema apply, no journal
+	// switch, no -wal/-shm created.
+	after := beesDirSnapshot(t, beesDir)
+	require.Equal(t, before, after)
+}
+
 func setupService(t *testing.T) *Service {
 	t.Helper()
 
@@ -2431,7 +2555,64 @@ func setupServiceAt(t *testing.T, dbPath string) *Service {
 	e, err := noopexporter.NewExporter()
 	require.NoError(t, err)
 
+	s, err := sqlitesource.NewReader()
+	require.NoError(t, err)
+
 	t.Cleanup(func() { r.Close() })
 
-	return NewService(r, i, e, "test")
+	return NewService(r, i, e, s, "test")
+}
+
+func seedSource(t *testing.T, issues ...domain.Issue) string {
+	t.Helper()
+
+	repoRoot := t.TempDir()
+	dbPath := filepath.Join(repoRoot, ".bees", "bees.db")
+	require.NoError(t, os.MkdirAll(filepath.Dir(dbPath), 0o755))
+
+	r, err := sqlite.NewRepo(repo.WithLocation(dbPath))
+	require.NoError(t, err)
+
+	ctx := context.Background()
+
+	// All issues first, so dependency foreign keys have their targets.
+	for i := range issues {
+		issues[i].SetDefaults()
+		require.NoError(t, r.CreateIssue(ctx, &issues[i]))
+	}
+
+	for i := range issues {
+		for j := range issues[i].Comments {
+			require.NoError(t, r.AddComment(ctx, &issues[i].Comments[j]))
+		}
+		for j := range issues[i].Handoffs {
+			require.NoError(t, r.AddHandoff(ctx, &issues[i].Handoffs[j]))
+		}
+		for _, dep := range issues[i].Dependencies {
+			require.NoError(t, r.AddDependency(ctx, dep))
+		}
+	}
+
+	require.NoError(t, r.Close())
+
+	return repoRoot
+}
+
+func beesDirSnapshot(t *testing.T, dir string) map[string][]byte {
+	t.Helper()
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+
+	snap := map[string][]byte{}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		require.NoError(t, err)
+		snap[e.Name()] = data
+	}
+
+	return snap
 }
