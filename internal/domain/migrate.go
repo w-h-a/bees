@@ -62,3 +62,63 @@ func PlanMigration(sources []SourceIssues, targetIDs []string) MigratePlan {
 
 	return plan
 }
+
+// CommitPlan is one commit run broken down per source, plus any Collisions.
+type CommitPlan struct {
+	Sources    []SourceImport
+	Collisions []string
+}
+
+// SourceImport is one source's commit breakdown: Imports are the issues whose
+// IDs are new to the global store, Skipped counts the ones whose IDs are
+// already there.
+type SourceImport struct {
+	Path    string
+	Imports []Issue
+	Skipped int
+}
+
+// PlanCommit splits each source's issues into those new to the target (to write)
+// and those already there (skipped by ID), and collects any full ID held by two
+// or more sources.
+func PlanCommit(sources []SourceIssues, targetIDs []string) CommitPlan {
+	plan := CommitPlan{
+		Sources: make([]SourceImport, 0, len(sources)),
+	}
+
+	inTarget := make(map[string]bool, len(targetIDs))
+	for _, id := range targetIDs {
+		inTarget[id] = true
+	}
+
+	idCounts := map[string]int{}
+	for _, src := range sources {
+		for _, issue := range src.Issues {
+			idCounts[issue.ID]++
+		}
+	}
+
+	for _, src := range sources {
+		imp := SourceImport{Path: src.Path}
+
+		for _, issue := range src.Issues {
+			if inTarget[issue.ID] {
+				imp.Skipped++
+				continue
+			}
+			imp.Imports = append(imp.Imports, issue)
+		}
+
+		plan.Sources = append(plan.Sources, imp)
+	}
+
+	for id, n := range idCounts {
+		if n > 1 {
+			plan.Collisions = append(plan.Collisions, id)
+		}
+	}
+
+	sort.Strings(plan.Collisions)
+
+	return plan
+}

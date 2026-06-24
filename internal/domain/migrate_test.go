@@ -149,3 +149,101 @@ func TestPlanMigration_MultipleSourcesCountedIndependently(t *testing.T) {
 	}, plan.Sources)
 	require.Empty(t, plan.Collisions)
 }
+
+func TestPlanCommit_SplitsNewAndExisting(t *testing.T) {
+	if len(os.Getenv("INTEGRATION")) > 0 {
+		t.Skip()
+	}
+
+	// Arrange: one issue already in the target, one new
+	sources := []domain.SourceIssues{
+		{
+			Path: "/repo/a",
+			Issues: []domain.Issue{
+				{ID: "a-0001", Title: "Already migrated"},
+				{ID: "a-0002", Title: "New"},
+			},
+		},
+	}
+	targetIDs := []string{"a-0001"}
+
+	// Act
+	plan := domain.PlanCommit(sources, targetIDs)
+
+	// Assert
+	require.Len(t, plan.Sources, 1)
+	require.Equal(t, "/repo/a", plan.Sources[0].Path)
+	require.Equal(t, 1, plan.Sources[0].Skipped)
+	require.Len(t, plan.Sources[0].Imports, 1)
+	require.Equal(t, "a-0002", plan.Sources[0].Imports[0].ID)
+	require.Empty(t, plan.Collisions)
+}
+
+func TestPlanCommit_DetectsSourceVsSourceCollision(t *testing.T) {
+	if len(os.Getenv("INTEGRATION")) > 0 {
+		t.Skip()
+	}
+
+	// Arrange: two sources both hold "dup-0001"
+	sources := []domain.SourceIssues{
+		{Path: "/repo/a", Issues: []domain.Issue{{ID: "dup-0001"}, {ID: "a-0002"}}},
+		{Path: "/repo/b", Issues: []domain.Issue{{ID: "dup-0001"}, {ID: "b-0003"}}},
+	}
+
+	// Act
+	plan := domain.PlanCommit(sources, nil)
+
+	// Assert
+	require.Equal(t, []string{"dup-0001"}, plan.Collisions)
+}
+
+func TestPlanCommit_SourceVsTargetIsSkipNotCollision(t *testing.T) {
+	if len(os.Getenv("INTEGRATION")) > 0 {
+		t.Skip()
+	}
+
+	// Arrange: the source's ID is already in the target (an idempotent re-run)
+	sources := []domain.SourceIssues{
+		{Path: "/repo/a", Issues: []domain.Issue{{ID: "a-0001"}}},
+	}
+	targetIDs := []string{"a-0001"}
+
+	// Act
+	plan := domain.PlanCommit(sources, targetIDs)
+
+	// Assert: skipped, not refused — this is what makes a re-run idempotent
+	require.Empty(t, plan.Collisions)
+	require.Equal(t, 1, plan.Sources[0].Skipped)
+	require.Empty(t, plan.Sources[0].Imports)
+}
+
+func TestPlanCommit_MultipleSourcesPartitionedIndependently(t *testing.T) {
+	if len(os.Getenv("INTEGRATION")) > 0 {
+		t.Skip()
+	}
+
+	// Arrange: target already holds a-0001 and b-0002
+	sources := []domain.SourceIssues{
+		{Path: "/repo/a", Issues: []domain.Issue{{ID: "a-0001"}, {ID: "a-0002"}}},
+		{Path: "/repo/b", Issues: []domain.Issue{{ID: "b-0002"}, {ID: "b-0003"}}},
+	}
+	targetIDs := []string{"a-0001", "b-0002"}
+
+	// Act
+	plan := domain.PlanCommit(sources, targetIDs)
+
+	// Assert: each source partitioned on its own, in input order
+	require.Len(t, plan.Sources, 2)
+
+	require.Equal(t, "/repo/a", plan.Sources[0].Path)
+	require.Equal(t, 1, plan.Sources[0].Skipped)
+	require.Len(t, plan.Sources[0].Imports, 1)
+	require.Equal(t, "a-0002", plan.Sources[0].Imports[0].ID)
+
+	require.Equal(t, "/repo/b", plan.Sources[1].Path)
+	require.Equal(t, 1, plan.Sources[1].Skipped)
+	require.Len(t, plan.Sources[1].Imports, 1)
+	require.Equal(t, "b-0003", plan.Sources[1].Imports[0].ID)
+
+	require.Empty(t, plan.Collisions)
+}
