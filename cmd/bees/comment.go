@@ -1,10 +1,12 @@
 package main
 
 import (
+	"os"
+
 	"github.com/spf13/cobra"
 )
 
-func newCommentCmd(cfg **config) *cobra.Command {
+func newCommentCmd() *cobra.Command {
 	var author string
 
 	cmd := &cobra.Command{
@@ -12,8 +14,8 @@ func newCommentCmd(cfg **config) *cobra.Command {
 		Short: "Add a comment to an issue",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if author == "" && *cfg != nil {
-				author, _ = resolveConfig(*cfg, "author")
+			if author == "" {
+				author = os.Getenv("BEES_AUTHOR")
 			}
 			return h.Comment(cmd.Context(), cmd.OutOrStdout(), args[0], author, args[1])
 		},
