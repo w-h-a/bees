@@ -514,3 +514,28 @@ func (h *Handler) Export(ctx context.Context, out io.Writer, dest io.Writer, fil
 
 	return nil
 }
+
+// Migrate renders the dry-run migration plan to out.
+func (h *Handler) Migrate(ctx context.Context, out io.Writer, targetDBPath string, sourceRepoPaths []string) error {
+	report, err := h.svc.PlanMigration(ctx, targetDBPath, sourceRepoPaths)
+	if err != nil {
+		return err
+	}
+
+	if h.json {
+		enc := json.NewEncoder(out)
+		enc.SetIndent("", " ")
+		if err := enc.Encode(report); err != nil {
+			return err
+		}
+	} else {
+		printMigrateReport(out, report)
+	}
+
+	if len(report.Collisions) > 0 {
+		return fmt.Errorf("refusing to migrate: %d colliding id(s): %s",
+			len(report.Collisions), strings.Join(report.Collisions, ", "))
+	}
+
+	return nil
+}

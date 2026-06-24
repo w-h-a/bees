@@ -53,6 +53,21 @@ func newRootCmd() *cobra.Command {
 				return nil
 			}
 
+			if cmd.Name() == "migrate" {
+				reader, err := sqlitesource.NewReader()
+				if err != nil {
+					return fmt.Errorf("failed to initialize reader: %w", err)
+				}
+
+				i, _ := noopimporter.NewImporter()
+				e, _ := noopexporter.NewExporter()
+
+				svc = service.NewService(nil, i, e, reader, "")
+				h = cli.New(svc, jsonOutput)
+
+				return nil
+			}
+
 			var err error
 
 			beesDir, err = discoverBeesDir()
@@ -122,12 +137,7 @@ func newRootCmd() *cobra.Command {
 					}
 				}
 
-				s, err := sqlitesource.NewReader()
-				if err != nil {
-					return fmt.Errorf("failed to initialize reader: %w", err)
-				}
-
-				svc = service.NewService(r, i, e, s, prefix)
+				svc = service.NewService(r, i, e, nil, prefix)
 			}
 
 			h = cli.New(svc, jsonOutput)
@@ -148,6 +158,7 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newInitCmd())
 	cmd.AddCommand(newImportCmd())
 	cmd.AddCommand(newExportCmd())
+	cmd.AddCommand(newMigrateCmd())
 	cmd.AddCommand(newCreateCmd())
 	cmd.AddCommand(newShowCmd())
 	cmd.AddCommand(newListCmd())
