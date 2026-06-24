@@ -17,6 +17,7 @@ import (
 	"github.com/w-h-a/bees/internal/handler/cli"
 	"github.com/w-h-a/bees/internal/service"
 	"github.com/w-h-a/bees/internal/util/home"
+	"github.com/w-h-a/bees/internal/util/prefix"
 )
 
 var (
@@ -115,9 +116,10 @@ func newRootCmd() *cobra.Command {
 				}
 			}
 
-			prefix := cfg.IssuePrefix()
+			prefixFlag, _ := cmd.Flags().GetString("prefix")
+			resolvedPrefix := prefix.Resolve(prefixFlag, os.Getenv("BEES_PREFIX"), cfg.IssuePrefix())
 
-			slog.Debug("project discovered", "dir", beesDir, "prefix", prefix)
+			slog.Debug("project discovered", "dir", beesDir, "prefix", resolvedPrefix)
 
 			slog.Debug("command path", "path", cmd.CommandPath(), "name", cmd.Name())
 
@@ -165,7 +167,7 @@ func newRootCmd() *cobra.Command {
 					}
 				}
 
-				svc = service.NewService(r, i, e, nil, prefix)
+				svc = service.NewService(r, i, e, nil, resolvedPrefix)
 			}
 
 			h = cli.New(svc, jsonOutput)
