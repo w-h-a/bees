@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/w-h-a/bees/internal/client/exporter/jsonl"
@@ -30,11 +29,6 @@ var (
 )
 
 func newRootCmd() *cobra.Command {
-	var (
-		beesDir string
-		cfg     *config
-	)
-
 	cmd := &cobra.Command{
 		Use:   "bees",
 		Short: "An alternative to a sea of .md files for developers who pair with agentic navigators.",
@@ -50,10 +44,6 @@ func newRootCmd() *cobra.Command {
 					handler = slog.NewTextHandler(os.Stderr, opts)
 				}
 				slog.SetDefault(slog.New(handler))
-			}
-
-			if cmd.Name() == "init" {
-				return nil
 			}
 
 			if cmd.Name() == "migrate" {
@@ -97,29 +87,32 @@ func newRootCmd() *cobra.Command {
 				return nil
 			}
 
-			var err error
+			beesHome := os.Getenv("BEES_HOME")
 
-			beesDir, err = discoverBeesDir()
-			if err != nil {
-				return fmt.Errorf("not a bees project (run bees init)")
+			var userHome string
+			if beesHome == "" {
+				var err error
+				userHome, err = os.UserHomeDir()
+				if err != nil {
+					return fmt.Errorf("failed to resolve user home: %w", err)
+				}
 			}
 
-			cfg, err = loadConfig(beesDir)
+			resolved, err := home.Resolve(beesHome, userHome)
 			if err != nil {
-				return fmt.Errorf("failed to read config: %w", err)
+				return err
 			}
 
 			if !cmd.Flags().Changed("json") {
-				val, _ := resolveConfig(cfg, "json")
-				if val == "true" || val == "1" {
+				if v := os.Getenv("BEES_JSON"); v == "true" || v == "1" {
 					jsonOutput = true
 				}
 			}
 
 			prefixFlag, _ := cmd.Flags().GetString("prefix")
-			resolvedPrefix := prefix.Resolve(prefixFlag, os.Getenv("BEES_PREFIX"), cfg.IssuePrefix())
+			resolvedPrefix := prefix.Resolve(prefixFlag, os.Getenv("BEES_PREFIX"), "")
 
-			slog.Debug("project discovered", "dir", beesDir, "prefix", resolvedPrefix)
+			slog.Debug("bees home resolved", "home", resolved.Home, "db", resolved.DB, "prefix", resolvedPrefix)
 
 			slog.Debug("command path", "path", cmd.CommandPath(), "name", cmd.Name())
 
@@ -144,8 +137,11 @@ func newRootCmd() *cobra.Command {
 				"bees handoff":    true,
 			}
 			if needsDB[cmd.CommandPath()] {
-				dbPath := filepath.Join(beesDir, "bees.db")
-				r, err := sqlite.NewRepo(repo.WithLocation(dbPath))
+				if err := os.MkdirAll(resolved.Home, 0o755); err != nil {
+					return fmt.Errorf("failed to create bees home: %w", err)
+				}
+
+				r, err := sqlite.NewRepo(repo.WithLocation(resolved.DB))
 				if err != nil {
 					return fmt.Errorf("failed to open database: %w", err)
 				}
@@ -185,7 +181,6 @@ func newRootCmd() *cobra.Command {
 	cmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 	cmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enable debug logging")
 
-	cmd.AddCommand(newInitCmd())
 	cmd.AddCommand(newImportCmd())
 	cmd.AddCommand(newExportCmd())
 	cmd.AddCommand(newMigrateCmd())
@@ -201,9 +196,8 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newReadyCmd())
 	cmd.AddCommand(newUpcomingCmd())
 	cmd.AddCommand(newDepCmd())
-	cmd.AddCommand(newCommentCmd(&cfg))
+	cmd.AddCommand(newCommentCmd())
 	cmd.AddCommand(newHandoffCmd())
-	cmd.AddCommand(newConfigCmd(&beesDir, &cfg))
 	cmd.AddCommand(newVersionCmd())
 
 	return cmd
