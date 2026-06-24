@@ -16,14 +16,16 @@ import (
 	sqlitesource "github.com/w-h-a/bees/internal/client/source/sqlite"
 	"github.com/w-h-a/bees/internal/handler/cli"
 	"github.com/w-h-a/bees/internal/service"
+	"github.com/w-h-a/bees/internal/util/home"
 )
 
 var (
-	jsonOutput bool
-	verbose    bool
-	svc        *service.Service
-	h          *cli.Handler
-	dbCloser   func() error
+	jsonOutput      bool
+	verbose         bool
+	migrateTargetDB string
+	svc             *service.Service
+	h               *cli.Handler
+	dbCloser        func() error
 )
 
 func newRootCmd() *cobra.Command {
@@ -62,7 +64,33 @@ func newRootCmd() *cobra.Command {
 				i, _ := noopimporter.NewImporter()
 				e, _ := noopexporter.NewExporter()
 
-				svc = service.NewService(nil, i, e, reader, "")
+				userHome, err := os.UserHomeDir()
+				if err != nil {
+					return fmt.Errorf("failed to resolve user home: %w", err)
+				}
+
+				resolved, err := home.Resolve(os.Getenv("BEES_HOME"), userHome)
+				if err != nil {
+					return err
+				}
+				migrateTargetDB = resolved.DB
+
+				var r repo.Repo
+				if commit, _ := cmd.Flags().GetBool("commit"); commit {
+					if err := os.MkdirAll(resolved.Home, 0o755); err != nil {
+						return fmt.Errorf("failed to create bees home: %w", err)
+					}
+
+					gr, err := sqlite.NewRepo(repo.WithLocation(resolved.DB))
+					if err != nil {
+						return fmt.Errorf("failed to open global store: %w", err)
+					}
+
+					r = gr
+					dbCloser = gr.Close
+				}
+
+				svc = service.NewService(r, i, e, reader, "")
 				h = cli.New(svc, jsonOutput)
 
 				return nil
