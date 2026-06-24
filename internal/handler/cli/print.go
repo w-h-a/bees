@@ -430,3 +430,32 @@ func printMigrateReport(w io.Writer, r service.MigrateReport) {
 
 	fmt.Fprintf(w, "\n%s\n", dimStyle.Render("Dry run: nothing was written."))
 }
+
+func printCommitReport(w io.Writer, r service.CommitReport) {
+	if len(r.Sources) == 0 && len(r.Skipped) == 0 && len(r.Collisions) == 0 {
+		fmt.Fprintln(w, "No sources to migrate.")
+		return
+	}
+
+	for _, s := range r.Sources {
+		fmt.Fprintln(w, headerStyle.Render(s.Path))
+		fmt.Fprintf(w, "  %s\n", dimStyle.Render(fmt.Sprintf("%d imported, %d skipped", s.Imported, s.Skipped)))
+	}
+
+	if len(r.Skipped) > 0 {
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, sectionStyle.Render("Skipped"))
+		for _, p := range r.Skipped {
+			fmt.Fprintf(w, "  %s %s\n", p, dimStyle.Render("(no .bees/bees.db)"))
+		}
+	}
+
+	if len(r.Collisions) > 0 {
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, sectionStyle.Render("Collisions"))
+		for _, id := range r.Collisions {
+			fmt.Fprintf(w, "  %s\n", id)
+		}
+		fmt.Fprintf(w, "\n%s\n", dimStyle.Render("Refused: nothing was written."))
+	}
+}

@@ -539,3 +539,36 @@ func (h *Handler) Migrate(ctx context.Context, out io.Writer, targetDBPath strin
 
 	return nil
 }
+
+// MigrateCommit performs the migration and writes the reconciliation to out.
+func (h *Handler) MigrateCommit(ctx context.Context, out io.Writer, sourceRepoPaths []string) error {
+	report, err := h.svc.CommitMigration(ctx, sourceRepoPaths)
+	if err != nil && len(report.Sources) == 0 && len(report.Skipped) == 0 {
+		return err
+	}
+
+	if h.json {
+		enc := json.NewEncoder(out)
+		enc.SetIndent("", " ")
+		if encErr := enc.Encode(report); encErr != nil {
+			return encErr
+		}
+	} else {
+		printCommitReport(out, report)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	if len(report.Collisions) > 0 {
+		return fmt.Errorf("refusing to migrate: %d colliding id(s): %s",
+			len(report.Collisions), strings.Join(report.Collisions, ", "))
+	}
+
+	if !h.json {
+		fmt.Fprintf(out, "\n%s\n", dimStyle.Render("Migration committed."))
+	}
+
+	return nil
+}
