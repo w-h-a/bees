@@ -868,7 +868,15 @@ func (r *sqliteRepo) configure() error {
 		return fmt.Errorf("failed to enable foreign keys: %w", err)
 	}
 
-	slog.Debug("pragmas configured", "journal_mode", journalMode, "foreign_keys", true)
+	// 5ms (milliseconds): a concurrent writer waits for SQLite's single write
+	// lock instead of failing immediately with "database is locked". Set before
+	// the schema bootstrap so a second process opening a fresh DB waits, then
+	// sees the schema already applied.
+	if _, err := r.db.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		return fmt.Errorf("failed to set busy timeout: %w", err)
+	}
+
+	slog.Debug("pragmas configured", "journal_mode", journalMode, "foreign_keys", true, "busy_timeout_ms", 5000)
 
 	var count int
 	err := r.db.QueryRow(
@@ -929,6 +937,8 @@ func NewRepo(opts ...repo.Option) (repo.Repo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
+
+	db.SetMaxOpenConns(1)
 
 	r := &sqliteRepo{
 		options: options,
