@@ -94,6 +94,7 @@ func newCreateCmd() *cobra.Command {
 	cmd.Flags().StringSliceVar(&labels, "label", nil, "Labels (repeatable)")
 	cmd.Flags().StringVar(&deferStr, "defer", "", "Defer until date (YYYY-MM-DD)")
 	cmd.Flags().StringVar(&dueStr, "due", "", "Due date (YYYY-MM-DD)")
+	cmd.Flags().String("prefix", "", "Prefix for the generated issue ID (overrides BEES_PREFIX)")
 
 	return cmd
 }
