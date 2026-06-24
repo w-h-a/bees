@@ -79,6 +79,66 @@ func (r *sqliteRepo) ExportIssues(ctx context.Context, filter domain.ExportFilte
 	return issues, rows.Err()
 }
 
+// ImportSource writes the given issues and all their relations in a single
+// transaction.
+func (r *sqliteRepo) ImportSource(ctx context.Context, issues []domain.Issue) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	for i := range issues {
+		issue := issues[i]
+
+		_, err := tx.ExecContext(
+			ctx,
+			`INSERT INTO issues (id, title, description, status, type, priority, assignee, estimate_mins, defer_until, due_at, created_at, updated_at, closed_at, parent_id)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			issue.ID, issue.Title, issue.Description, string(issue.Status), string(issue.Type),
+			issue.Priority, issue.Assignee, issue.EstimateMins, issue.DeferUntil, issue.DueAt,
+			issue.CreatedAt, issue.UpdatedAt, issue.ClosedAt, issue.ParentID,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to insert issue %s: %w", issue.ID, err)
+		}
+
+		for _, label := range issue.Labels {
+			if _, err := tx.ExecContext(ctx, "INSERT OR IGNORE INTO labels (issue_id, label) VALUES (?, ?)", issue.ID, label); err != nil {
+				return fmt.Errorf("failed to insert label %q on %s: %w", label, issue.ID, err)
+			}
+		}
+	}
+
+	for i := range issues {
+		issue := issues[i]
+
+		for _, c := range issue.Comments {
+			if _, err := tx.ExecContext(ctx, "INSERT INTO comments (issue_id, author, body, created_at) VALUES (?, ?, ?, ?)", c.IssueID, c.Author, c.Body, c.CreatedAt); err != nil {
+				return fmt.Errorf("failed to insert comment on %s: %w", issue.ID, err)
+			}
+		}
+
+		for _, hf := range issue.Handoffs {
+			if _, err := tx.ExecContext(ctx, "INSERT INTO handoffs (issue_id, done, remaining, decisions, uncertain, created_at) VALUES (?, ?, ?, ?, ?, ?)", hf.IssueID, hf.Done, hf.Remaining, hf.Decisions, hf.Uncertain, hf.CreatedAt); err != nil {
+				return fmt.Errorf("failed to insert handoff on %s: %w", issue.ID, err)
+			}
+		}
+
+		for _, dep := range issue.Dependencies {
+			if _, err := tx.ExecContext(ctx, "INSERT OR IGNORE INTO dependencies (issue_id, depends_on_id, created_at) VALUES (?, ?, ?)", dep.IssueID, dep.DependsOnID, dep.CreatedAt); err != nil {
+				return fmt.Errorf("failed to insert dependency %s->%s: %w", dep.IssueID, dep.DependsOnID, err)
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit import: %w", err)
+	}
+
+	return nil
+}
+
 func (r *sqliteRepo) CreateIssue(ctx context.Context, issue *domain.Issue) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {

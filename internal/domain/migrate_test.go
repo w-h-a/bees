@@ -247,3 +247,29 @@ func TestPlanCommit_MultipleSourcesPartitionedIndependently(t *testing.T) {
 
 	require.Empty(t, plan.Collisions)
 }
+
+func TestPlanCommit_OrdersImportsParentsFirst(t *testing.T) {
+	if len(os.Getenv("INTEGRATION")) > 0 {
+		t.Skip()
+	}
+
+	// Arrange: child listed before its parent, both new to the target
+	parent := "epic-0001"
+	sources := []domain.SourceIssues{
+		{
+			Path: "/repo/a",
+			Issues: []domain.Issue{
+				{ID: "task-0002", ParentID: &parent},
+				{ID: "epic-0001"},
+			},
+		},
+	}
+
+	// Act
+	plan := domain.PlanCommit(sources, nil)
+
+	// Assert: parent comes back before its child — FK-safe insert order
+	require.Len(t, plan.Sources[0].Imports, 2)
+	require.Equal(t, "epic-0001", plan.Sources[0].Imports[0].ID)
+	require.Equal(t, "task-0002", plan.Sources[0].Imports[1].ID)
+}

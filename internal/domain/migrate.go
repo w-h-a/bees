@@ -1,6 +1,10 @@
 package domain
 
-import "sort"
+import (
+	"sort"
+
+	"github.com/w-h-a/bees/internal/util/toposort"
+)
 
 // SourceIssues is one v1 source store's fully-read contents, handed to the
 // planner as plain values.
@@ -109,6 +113,8 @@ func PlanCommit(sources []SourceIssues, targetIDs []string) CommitPlan {
 			imp.Imports = append(imp.Imports, issue)
 		}
 
+		imp.Imports = orderParentsFirst(imp.Imports)
+
 		plan.Sources = append(plan.Sources, imp)
 	}
 
@@ -121,4 +127,30 @@ func PlanCommit(sources []SourceIssues, targetIDs []string) CommitPlan {
 	sort.Strings(plan.Collisions)
 
 	return plan
+}
+
+// orderParentsFirst returns issues with every parent ahead of its children, so a
+// commit inserts them without tripping the parent_id foreign key.
+func orderParentsFirst(issues []Issue) []Issue {
+	byID := make(map[string]Issue, len(issues))
+	ids := make([]string, 0, len(issues))
+	for _, issue := range issues {
+		byID[issue.ID] = issue
+		ids = append(ids, issue.ID)
+	}
+
+	children := map[string][]string{}
+	for _, issue := range issues {
+		if issue.ParentID == nil {
+			continue
+		}
+		children[*issue.ParentID] = append(children[*issue.ParentID], issue.ID)
+	}
+
+	ordered := make([]Issue, 0, len(issues))
+	for _, id := range toposort.Order(ids, children) {
+		ordered = append(ordered, byID[id])
+	}
+
+	return ordered
 }
