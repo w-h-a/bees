@@ -18,6 +18,253 @@ import (
 	"github.com/w-h-a/bees/internal/domain"
 )
 
+func TestPlanMigration_ReportsPerSourceCounts(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	repoA := seedSource(t,
+		domain.Issue{
+			ID:           "a-0001",
+			Title:        "Alpha one",
+			Labels:       []string{"backend", "v1"},
+			Comments:     []domain.Comment{{IssueID: "a-0001", Body: "c1"}, {IssueID: "a-0001", Body: "c2"}},
+			Handoffs:     []domain.Handoff{{IssueID: "a-0001", Done: "x"}},
+			Dependencies: []domain.Dependency{{IssueID: "a-0001", DependsOnID: "a-0002"}},
+		},
+		domain.Issue{ID: "a-0002", Title: "Alpha two"},
+	)
+
+	repoB := seedSource(t,
+		domain.Issue{ID: "b-0001", Title: "Beta one", Labels: []string{"api"}},
+	)
+
+	missingTarget := filepath.Join(t.TempDir(), "bees.db")
+
+	// Act
+	report, err := svc.PlanMigration(ctx, missingTarget, []string{repoA, repoB})
+	require.NoError(t, err)
+
+	// Assert
+	require.Equal(t, []domain.SourceCounts{
+		{Path: repoA, Issues: 2, Comments: 2, Handoffs: 1, Deps: 1, Labels: 2},
+		{Path: repoB, Issues: 1, Labels: 1},
+	}, report.Sources)
+	require.Empty(t, report.Skipped)
+	require.Empty(t, report.Collisions)
+}
+
+func TestPlanMigration_SurfacesSourceVsTargetCollision(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange: the target store already holds shared-0001 ...
+	targetRoot := seedSource(t, domain.Issue{ID: "shared-0001", Title: "Already in target"})
+	targetDB := filepath.Join(targetRoot, ".bees", "bees.db")
+
+	// ... and a source carries the same full ID
+	repoA := seedSource(t,
+		domain.Issue{ID: "shared-0001", Title: "Also here"},
+		domain.Issue{ID: "a-0002", Title: "Unique"},
+	)
+
+	svc := setupService(t)
+	ctx := context.Background()
+
+	// Act
+	report, err := svc.PlanMigration(ctx, targetDB, []string{repoA})
+	require.NoError(t, err)
+
+	// Assert
+	require.Equal(t, []string{"shared-0001"}, report.Collisions)
+}
+
+func TestPlanMigration_SkipsSourceWithNoStore(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange: one real source, one repo path that was never a bees project
+	repoA := seedSource(t, domain.Issue{ID: "a-0001", Title: "Alpha"})
+	missingRepo := t.TempDir() // a dir, but no .bees/bees.db
+
+	svc := setupService(t)
+	ctx := context.Background()
+	missingTarget := filepath.Join(t.TempDir(), "bees.db")
+
+	// Act
+	report, err := svc.PlanMigration(ctx, missingTarget, []string{repoA, missingRepo})
+	require.NoError(t, err)
+
+	// Assert: run succeeds; missing repo reported as skipped, real source still counted
+	require.Equal(t, []string{missingRepo}, report.Skipped)
+	require.Equal(t, []domain.SourceCounts{
+		{Path: repoA, Issues: 1},
+	}, report.Sources)
+	require.Empty(t, report.Collisions)
+}
+
+func TestPlanMigration_DoesNotMutateSource(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	repoA := seedSource(t,
+		domain.Issue{
+			ID:       "a-0001",
+			Title:    "Alpha",
+			Labels:   []string{"x"},
+			Comments: []domain.Comment{{IssueID: "a-0001", Body: "c"}},
+		},
+	)
+	beesDir := filepath.Join(repoA, ".bees")
+
+	before := beesDirSnapshot(t, beesDir)
+
+	svc := setupService(t)
+	ctx := context.Background()
+	missingTarget := filepath.Join(t.TempDir(), "bees.db")
+
+	// Act
+	_, err := svc.PlanMigration(ctx, missingTarget, []string{repoA})
+	require.NoError(t, err)
+
+	// Assert: source dir byte-for-byte unchanged — no schema apply, no journal
+	// switch, no -wal/-shm created.
+	after := beesDirSnapshot(t, beesDir)
+	require.Equal(t, before, after)
+}
+
+func TestCommitMigration_ImportsIssuesWithRelations(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	repoA := seedSource(t,
+		domain.Issue{
+			ID:       "a-0001",
+			Title:    "Alpha",
+			Labels:   []string{"backend"},
+			Comments: []domain.Comment{{IssueID: "a-0001", Body: "a note"}},
+			Handoffs: []domain.Handoff{{IssueID: "a-0001", Done: "did stuff"}},
+		},
+	)
+
+	// Act
+	report, err := svc.CommitMigration(ctx, []string{repoA})
+	require.NoError(t, err)
+
+	// Assert: reconciliation
+	require.Equal(t, []SourceReconcile{{Path: repoA, Imported: 1, Skipped: 0}}, report.Sources)
+	require.Empty(t, report.Collisions)
+
+	// Assert: the issue and its relations landed in the global store
+	got, err := svc.GetIssue(ctx, "a-0001")
+	require.NoError(t, err)
+	require.Equal(t, "Alpha", got.Title)
+	require.Equal(t, []string{"backend"}, got.Labels)
+	require.Len(t, got.Comments, 1)
+	require.Equal(t, "a note", got.Comments[0].Body)
+	require.Len(t, got.Handoffs, 1)
+	require.Equal(t, "did stuff", got.Handoffs[0].Done)
+}
+
+func TestCommitMigration_IdempotentOnRerun(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	repoA := seedSource(t,
+		domain.Issue{ID: "a-0001", Title: "Alpha", Comments: []domain.Comment{{IssueID: "a-0001", Body: "note"}}},
+		domain.Issue{ID: "a-0002", Title: "Beta"},
+	)
+
+	// Act: commit twice
+	first, err := svc.CommitMigration(ctx, []string{repoA})
+	require.NoError(t, err)
+
+	second, err := svc.CommitMigration(ctx, []string{repoA})
+	require.NoError(t, err)
+
+	// Assert: first imports both; second skips both by ID
+	require.Equal(t, []SourceReconcile{{Path: repoA, Imported: 2, Skipped: 0}}, first.Sources)
+	require.Equal(t, []SourceReconcile{{Path: repoA, Imported: 0, Skipped: 2}}, second.Sources)
+
+	// Assert: no duplicates — two issues total, the comment not re-added
+	all, err := svc.ListIssues(ctx, domain.ListFilter{Status: "all", Limit: 100})
+	require.NoError(t, err)
+	require.Len(t, all, 2)
+
+	got, err := svc.GetIssue(ctx, "a-0001")
+	require.NoError(t, err)
+	require.Len(t, got.Comments, 1)
+}
+
+func TestCommitMigration_RefusesOnCollisionWritesNothing(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange: two sources share the full ID "dup-0001"
+	svc := setupService(t)
+	ctx := context.Background()
+
+	repoA := seedSource(t, domain.Issue{ID: "dup-0001", Title: "From A"}, domain.Issue{ID: "a-0002", Title: "A only"})
+	repoB := seedSource(t, domain.Issue{ID: "dup-0001", Title: "From B"}, domain.Issue{ID: "b-0003", Title: "B only"})
+
+	// Act
+	report, err := svc.CommitMigration(ctx, []string{repoA, repoB})
+	require.NoError(t, err)
+
+	// Assert: refused — collision reported, nothing reconciled
+	require.Equal(t, []string{"dup-0001"}, report.Collisions)
+	require.Empty(t, report.Sources)
+
+	// Assert: global store untouched — not even the non-colliding issues
+	all, err := svc.ListIssues(ctx, domain.ListFilter{Status: "all", Limit: 100})
+	require.NoError(t, err)
+	require.Empty(t, all)
+}
+
+func TestCommitMigration_LeavesSourceUnchanged(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	repoA := seedSource(t,
+		domain.Issue{ID: "a-0001", Title: "Alpha", Labels: []string{"x"}, Comments: []domain.Comment{{IssueID: "a-0001", Body: "c"}}},
+	)
+	beesDir := filepath.Join(repoA, ".bees")
+
+	before := beesDirSnapshot(t, beesDir)
+
+	// Act
+	_, err := svc.CommitMigration(ctx, []string{repoA})
+	require.NoError(t, err)
+
+	// Assert: source byte-for-byte unchanged despite the commit writing to the global store
+	after := beesDirSnapshot(t, beesDir)
+	require.Equal(t, before, after)
+}
+
 func TestCreateAndGetIssue(t *testing.T) {
 	if os.Getenv("INTEGRATION") == "" {
 		t.Skip("set INTEGRATION=1 to run")
@@ -2410,129 +2657,6 @@ func TestConcurrentWrites_NoLockError(t *testing.T) {
 	for err := range errs {
 		require.NoError(t, err)
 	}
-}
-
-func TestPlanMigration_ReportsPerSourceCounts(t *testing.T) {
-	if os.Getenv("INTEGRATION") == "" {
-		t.Skip("set INTEGRATION=1 to run")
-	}
-
-	// Arrange
-	svc := setupService(t)
-	ctx := context.Background()
-
-	repoA := seedSource(t,
-		domain.Issue{
-			ID:           "a-0001",
-			Title:        "Alpha one",
-			Labels:       []string{"backend", "v1"},
-			Comments:     []domain.Comment{{IssueID: "a-0001", Body: "c1"}, {IssueID: "a-0001", Body: "c2"}},
-			Handoffs:     []domain.Handoff{{IssueID: "a-0001", Done: "x"}},
-			Dependencies: []domain.Dependency{{IssueID: "a-0001", DependsOnID: "a-0002"}},
-		},
-		domain.Issue{ID: "a-0002", Title: "Alpha two"},
-	)
-
-	repoB := seedSource(t,
-		domain.Issue{ID: "b-0001", Title: "Beta one", Labels: []string{"api"}},
-	)
-
-	missingTarget := filepath.Join(t.TempDir(), "bees.db")
-
-	// Act
-	report, err := svc.PlanMigration(ctx, missingTarget, []string{repoA, repoB})
-	require.NoError(t, err)
-
-	// Assert
-	require.Equal(t, []domain.SourceCounts{
-		{Path: repoA, Issues: 2, Comments: 2, Handoffs: 1, Deps: 1, Labels: 2},
-		{Path: repoB, Issues: 1, Labels: 1},
-	}, report.Sources)
-	require.Empty(t, report.Skipped)
-	require.Empty(t, report.Collisions)
-}
-
-func TestPlanMigration_SurfacesSourceVsTargetCollision(t *testing.T) {
-	if os.Getenv("INTEGRATION") == "" {
-		t.Skip("set INTEGRATION=1 to run")
-	}
-
-	// Arrange: the target store already holds shared-0001 ...
-	targetRoot := seedSource(t, domain.Issue{ID: "shared-0001", Title: "Already in target"})
-	targetDB := filepath.Join(targetRoot, ".bees", "bees.db")
-
-	// ... and a source carries the same full ID
-	repoA := seedSource(t,
-		domain.Issue{ID: "shared-0001", Title: "Also here"},
-		domain.Issue{ID: "a-0002", Title: "Unique"},
-	)
-
-	svc := setupService(t)
-	ctx := context.Background()
-
-	// Act
-	report, err := svc.PlanMigration(ctx, targetDB, []string{repoA})
-	require.NoError(t, err)
-
-	// Assert
-	require.Equal(t, []string{"shared-0001"}, report.Collisions)
-}
-
-func TestPlanMigration_SkipsSourceWithNoStore(t *testing.T) {
-	if os.Getenv("INTEGRATION") == "" {
-		t.Skip("set INTEGRATION=1 to run")
-	}
-
-	// Arrange: one real source, one repo path that was never a bees project
-	repoA := seedSource(t, domain.Issue{ID: "a-0001", Title: "Alpha"})
-	missingRepo := t.TempDir() // a dir, but no .bees/bees.db
-
-	svc := setupService(t)
-	ctx := context.Background()
-	missingTarget := filepath.Join(t.TempDir(), "bees.db")
-
-	// Act
-	report, err := svc.PlanMigration(ctx, missingTarget, []string{repoA, missingRepo})
-	require.NoError(t, err)
-
-	// Assert: run succeeds; missing repo reported as skipped, real source still counted
-	require.Equal(t, []string{missingRepo}, report.Skipped)
-	require.Equal(t, []domain.SourceCounts{
-		{Path: repoA, Issues: 1},
-	}, report.Sources)
-	require.Empty(t, report.Collisions)
-}
-
-func TestPlanMigration_DoesNotMutateSource(t *testing.T) {
-	if os.Getenv("INTEGRATION") == "" {
-		t.Skip("set INTEGRATION=1 to run")
-	}
-
-	// Arrange
-	repoA := seedSource(t,
-		domain.Issue{
-			ID:       "a-0001",
-			Title:    "Alpha",
-			Labels:   []string{"x"},
-			Comments: []domain.Comment{{IssueID: "a-0001", Body: "c"}},
-		},
-	)
-	beesDir := filepath.Join(repoA, ".bees")
-
-	before := beesDirSnapshot(t, beesDir)
-
-	svc := setupService(t)
-	ctx := context.Background()
-	missingTarget := filepath.Join(t.TempDir(), "bees.db")
-
-	// Act
-	_, err := svc.PlanMigration(ctx, missingTarget, []string{repoA})
-	require.NoError(t, err)
-
-	// Assert: source dir byte-for-byte unchanged — no schema apply, no journal
-	// switch, no -wal/-shm created.
-	after := beesDirSnapshot(t, beesDir)
-	require.Equal(t, before, after)
 }
 
 func setupService(t *testing.T) *Service {

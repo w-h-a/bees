@@ -159,6 +159,98 @@ func (s *Service) ExportIssues(ctx context.Context, w io.Writer, filter domain.E
 	return nil
 }
 
+// PlanMigration is the dry-run controller: it reads the target and each source,
+// skips sources with no store, and returns the import plan plus any
+// full-ID collisions. It does not write.
+func (s *Service) PlanMigration(ctx context.Context, targetDBPath string, sourceRepoPaths []string) (MigrateReport, error) {
+	targetIDs, err := s.targetIDs(ctx, targetDBPath)
+	if err != nil {
+		return MigrateReport{}, err
+	}
+
+	var sources []domain.SourceIssues
+	var skipped []string
+
+	for _, repoPath := range sourceRepoPaths {
+		dbPath := filepath.Join(repoPath, ".bees", "bees.db")
+
+		issues, err := s.reader.Read(ctx, dbPath)
+		if errors.Is(err, source.ErrNotFound) {
+			slog.Debug("source skipped: no store", "repo", repoPath)
+			skipped = append(skipped, repoPath)
+			continue
+		}
+		if err != nil {
+			return MigrateReport{}, fmt.Errorf("failed to read source %q: %w", repoPath, err)
+		}
+
+		sources = append(sources, domain.SourceIssues{Path: repoPath, Issues: issues})
+	}
+
+	plan := domain.PlanMigration(sources, targetIDs)
+
+	slog.Debug("migration planned", "sources", len(sources), "skipped", len(skipped), "collisions", len(plan.Collisions))
+
+	return MigrateReport{
+		Sources:    plan.Sources,
+		Skipped:    skipped,
+		Collisions: plan.Collisions,
+	}, nil
+}
+
+// CommitMigration imports each source's new issues into the global store,
+// idempotently and returns a per-source reconciliation.
+func (s *Service) CommitMigration(ctx context.Context, sourceRepoPaths []string) (CommitReport, error) {
+	var sources []domain.SourceIssues
+	var skipped []string
+
+	for _, repoPath := range sourceRepoPaths {
+		dbPath := filepath.Join(repoPath, ".bees", "bees.db")
+
+		issues, err := s.reader.Read(ctx, dbPath)
+		if errors.Is(err, source.ErrNotFound) {
+			slog.Debug("source skipped: no store", "repo", repoPath)
+			skipped = append(skipped, repoPath)
+			continue
+		}
+		if err != nil {
+			return CommitReport{}, fmt.Errorf("failed to read source %q: %w", repoPath, err)
+		}
+
+		sources = append(sources, domain.SourceIssues{Path: repoPath, Issues: issues})
+	}
+
+	targetIDs, err := s.existingIDs(ctx)
+	if err != nil {
+		return CommitReport{}, err
+	}
+
+	plan := domain.PlanCommit(sources, targetIDs)
+
+	if len(plan.Collisions) > 0 {
+		slog.Debug("commit refused: collisions", "count", len(plan.Collisions))
+		return CommitReport{Skipped: skipped, Collisions: plan.Collisions}, nil
+	}
+
+	reconciles := make([]SourceReconcile, 0, len(plan.Sources))
+	for _, src := range plan.Sources {
+		if err := s.repo.ImportSource(ctx, src.Imports); err != nil {
+			return CommitReport{}, fmt.Errorf("failed to commit source %q: %w", src.Path, err)
+		}
+
+		reconciles = append(reconciles, SourceReconcile{
+			Path:     src.Path,
+			Imported: len(src.Imports),
+			Skipped:  src.Skipped,
+		})
+		slog.Debug("source committed", "repo", src.Path, "imported", len(src.Imports), "skipped", src.Skipped)
+	}
+
+	slog.Debug("commit complete", "sources", len(reconciles), "skipped_sources", len(skipped))
+
+	return CommitReport{Sources: reconciles, Skipped: skipped}, nil
+}
+
 func (s *Service) CreateIssue(ctx context.Context, issue *domain.Issue) (string, error) {
 	issue.SetDefaults()
 
@@ -907,45 +999,6 @@ func (s *Service) AddHandoff(
 	return handoff, nil
 }
 
-// PlanMigration is the dry-run controller: it reads the target and each source,
-// skips sources with no store, and returns the import plan plus any
-// full-ID collisions. It does not write.
-func (s *Service) PlanMigration(ctx context.Context, targetDBPath string, sourceRepoPaths []string) (MigrateReport, error) {
-	targetIDs, err := s.targetIDs(ctx, targetDBPath)
-	if err != nil {
-		return MigrateReport{}, err
-	}
-
-	var sources []domain.SourceIssues
-	var skipped []string
-
-	for _, repoPath := range sourceRepoPaths {
-		dbPath := filepath.Join(repoPath, ".bees", "bees.db")
-
-		issues, err := s.reader.Read(ctx, dbPath)
-		if errors.Is(err, source.ErrNotFound) {
-			slog.Debug("source skipped: no store", "repo", repoPath)
-			skipped = append(skipped, repoPath)
-			continue
-		}
-		if err != nil {
-			return MigrateReport{}, fmt.Errorf("failed to read source %q: %w", repoPath, err)
-		}
-
-		sources = append(sources, domain.SourceIssues{Path: repoPath, Issues: issues})
-	}
-
-	plan := domain.PlanMigration(sources, targetIDs)
-
-	slog.Debug("migration planned", "sources", len(sources), "skipped", len(skipped), "collisions", len(plan.Collisions))
-
-	return MigrateReport{
-		Sources:    plan.Sources,
-		Skipped:    skipped,
-		Collisions: plan.Collisions,
-	}, nil
-}
-
 func (s *Service) populateRelations(ctx context.Context, issues []domain.Issue) error {
 	for i := range issues {
 		id := issues[i].ID
@@ -986,6 +1039,21 @@ func (s *Service) targetIDs(ctx context.Context, targetDBPath string) ([]string,
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to read target store %s: %w", targetDBPath, err)
+	}
+
+	ids := make([]string, 0, len(issues))
+	for _, issue := range issues {
+		ids = append(ids, issue.ID)
+	}
+
+	return ids, nil
+}
+
+// existingIDs returns the ids already in the global store, for skip-by-ID.
+func (s *Service) existingIDs(ctx context.Context) ([]string, error) {
+	issues, err := s.repo.ExportIssues(ctx, domain.ExportFilter{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to read global store: %w", err)
 	}
 
 	ids := make([]string, 0, len(issues))
