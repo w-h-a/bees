@@ -13,6 +13,7 @@ import (
 	noopimporter "github.com/w-h-a/bees/internal/client/importer/noop"
 	"github.com/w-h-a/bees/internal/client/repo"
 	"github.com/w-h-a/bees/internal/client/repo/sqlite"
+	sqlitesource "github.com/w-h-a/bees/internal/client/source/sqlite"
 	"github.com/w-h-a/bees/internal/handler/cli"
 	"github.com/w-h-a/bees/internal/service"
 )
@@ -121,7 +122,12 @@ func newRootCmd() *cobra.Command {
 					}
 				}
 
-				svc = service.NewService(r, i, e, prefix)
+				s, err := sqlitesource.NewReader()
+				if err != nil {
+					return fmt.Errorf("failed to initialize reader: %w", err)
+				}
+
+				svc = service.NewService(r, i, e, s, prefix)
 			}
 
 			h = cli.New(svc, jsonOutput)

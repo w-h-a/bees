@@ -21,14 +21,14 @@ type sqliteReader struct {
 	options source.Options
 }
 
-func NewReader(opts ...source.Option) source.Reader {
+func NewReader(opts ...source.Option) (source.Reader, error) {
 	options := source.NewOptions(opts...)
 
 	s := &sqliteReader{
 		options: options,
 	}
 
-	return s
+	return s, nil
 }
 
 // Read opens dbPath read-only, reads every issue with its relations, and closes

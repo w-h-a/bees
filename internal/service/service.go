@@ -2,15 +2,18 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/w-h-a/bees/internal/client/exporter"
 	"github.com/w-h-a/bees/internal/client/importer"
 	"github.com/w-h-a/bees/internal/client/repo"
+	"github.com/w-h-a/bees/internal/client/source"
 	"github.com/w-h-a/bees/internal/domain"
 	"github.com/w-h-a/bees/internal/util/hash"
 	"github.com/w-h-a/bees/internal/util/idgen"
@@ -24,6 +27,7 @@ type Service struct {
 	repo   repo.Repo
 	imp    importer.Importer
 	exp    exporter.Exporter
+	reader source.Reader
 	prefix string
 }
 
@@ -903,6 +907,45 @@ func (s *Service) AddHandoff(
 	return handoff, nil
 }
 
+// PlanMigration is the dry-run controller: it reads the target and each source,
+// skips sources with no store, and returns the import plan plus any
+// full-ID collisions. It does not write.
+func (s *Service) PlanMigration(ctx context.Context, targetDBPath string, sourceRepoPaths []string) (MigrateReport, error) {
+	targetIDs, err := s.targetIDs(ctx, targetDBPath)
+	if err != nil {
+		return MigrateReport{}, err
+	}
+
+	var sources []domain.SourceIssues
+	var skipped []string
+
+	for _, repoPath := range sourceRepoPaths {
+		dbPath := filepath.Join(repoPath, ".bees", "bees.db")
+
+		issues, err := s.reader.Read(ctx, dbPath)
+		if errors.Is(err, source.ErrNotFound) {
+			slog.Debug("source skipped: no store", "repo", repoPath)
+			skipped = append(skipped, repoPath)
+			continue
+		}
+		if err != nil {
+			return MigrateReport{}, fmt.Errorf("failed to read source %q: %w", repoPath, err)
+		}
+
+		sources = append(sources, domain.SourceIssues{Path: repoPath, Issues: issues})
+	}
+
+	plan := domain.PlanMigration(sources, targetIDs)
+
+	slog.Debug("migration planned", "sources", len(sources), "skipped", len(skipped), "collisions", len(plan.Collisions))
+
+	return MigrateReport{
+		Sources:    plan.Sources,
+		Skipped:    skipped,
+		Collisions: plan.Collisions,
+	}, nil
+}
+
 func (s *Service) populateRelations(ctx context.Context, issues []domain.Issue) error {
 	for i := range issues {
 		id := issues[i].ID
@@ -935,11 +978,36 @@ func (s *Service) populateRelations(ctx context.Context, issues []domain.Issue) 
 	return nil
 }
 
-func NewService(repo repo.Repo, imp importer.Importer, exp exporter.Exporter, prefix string) *Service {
+// targetIDs read the existing global store's issue IDs for collision detection.
+func (s *Service) targetIDs(ctx context.Context, targetDBPath string) ([]string, error) {
+	issues, err := s.reader.Read(ctx, targetDBPath)
+	if errors.Is(err, source.ErrNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to read target store %s: %w", targetDBPath, err)
+	}
+
+	ids := make([]string, 0, len(issues))
+	for _, issue := range issues {
+		ids = append(ids, issue.ID)
+	}
+
+	return ids, nil
+}
+
+func NewService(
+	repo repo.Repo,
+	imp importer.Importer,
+	exp exporter.Exporter,
+	reader source.Reader,
+	prefix string,
+) *Service {
 	return &Service{
 		repo:   repo,
 		imp:    imp,
 		exp:    exp,
+		reader: reader,
 		prefix: prefix,
 	}
 }
