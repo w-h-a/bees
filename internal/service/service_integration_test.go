@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -2364,10 +2366,61 @@ func TestPopulateRelations_includes_handoffs(t *testing.T) {
 	require.Equal(t, "done stuff", got.Handoffs[0].Done)
 }
 
+func TestConcurrentWrites_NoLockError(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange: two independent services over one shared DB file -- two processes
+	// on a device contending for the same ~/.bees/bees.db, each its own NewRepo.
+	dbPath := filepath.Join(t.TempDir(), "bees.db")
+	svcA := setupServiceAt(t, dbPath)
+	svcB := setupServiceAt(t, dbPath)
+
+	ctx := context.Background()
+	services := []*Service{svcA, svcB}
+
+	const writesPerService = 15
+	total := writesPerService * len(services)
+
+	start := make(chan struct{})
+	errs := make(chan error, total)
+	var wg sync.WaitGroup
+
+	// Act: release every writer at once so the two services genuinely contend.
+	for si, svc := range services {
+		for w := range writesPerService {
+			wg.Add(1)
+			go func(svc *Service, si, w int) {
+				defer wg.Done()
+				<-start
+				title := fmt.Sprintf("concurrent-%d-%d", si, w)
+				_, err := svc.CreateIssue(ctx, &domain.Issue{Title: title})
+				errs <- err
+			}(svc, si, w)
+		}
+	}
+
+	close(start)
+	wg.Wait()
+	close(errs)
+
+	// Assert: every concurrent write waited-and-succeeded -- no lock error.
+	for err := range errs {
+		require.NoError(t, err)
+	}
+}
+
 func setupService(t *testing.T) *Service {
 	t.Helper()
 
 	dbPath := filepath.Join(t.TempDir(), "bees.db")
+
+	return setupServiceAt(t, dbPath)
+}
+
+func setupServiceAt(t *testing.T, dbPath string) *Service {
+	t.Helper()
 
 	r, err := sqlite.NewRepo(repo.WithLocation(dbPath))
 	require.NoError(t, err)
