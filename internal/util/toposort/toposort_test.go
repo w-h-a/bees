@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/w-h-a/bees/internal/util/toposort"
+	"github.com/w-h-a/bees/v2/internal/util/toposort"
 )
 
 func TestOrder_ParentBeforeChild(t *testing.T) {

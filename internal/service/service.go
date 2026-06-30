@@ -10,13 +10,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/w-h-a/bees/internal/client/exporter"
-	"github.com/w-h-a/bees/internal/client/importer"
-	"github.com/w-h-a/bees/internal/client/repo"
-	"github.com/w-h-a/bees/internal/client/source"
-	"github.com/w-h-a/bees/internal/domain"
-	"github.com/w-h-a/bees/internal/util/hash"
-	"github.com/w-h-a/bees/internal/util/idgen"
+	"github.com/w-h-a/bees/v2/internal/client/exporter"
+	"github.com/w-h-a/bees/v2/internal/client/importer"
+	"github.com/w-h-a/bees/v2/internal/client/repo"
+	"github.com/w-h-a/bees/v2/internal/client/source"
+	"github.com/w-h-a/bees/v2/internal/domain"
+	"github.com/w-h-a/bees/v2/internal/util/hash"
+	"github.com/w-h-a/bees/v2/internal/util/idgen"
 )
 
 const (

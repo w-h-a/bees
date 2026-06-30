@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	noopexporter "github.com/w-h-a/bees/internal/client/exporter/noop"
-	noopimporter "github.com/w-h-a/bees/internal/client/importer/noop"
-	"github.com/w-h-a/bees/internal/client/repo"
-	"github.com/w-h-a/bees/internal/client/repo/sqlite"
-	sqlitesource "github.com/w-h-a/bees/internal/client/source/sqlite"
-	"github.com/w-h-a/bees/internal/domain"
+	noopexporter "github.com/w-h-a/bees/v2/internal/client/exporter/noop"
+	noopimporter "github.com/w-h-a/bees/v2/internal/client/importer/noop"
+	"github.com/w-h-a/bees/v2/internal/client/repo"
+	"github.com/w-h-a/bees/v2/internal/client/repo/sqlite"
+	sqlitesource "github.com/w-h-a/bees/v2/internal/client/source/sqlite"
+	"github.com/w-h-a/bees/v2/internal/domain"
 )
 
 func TestPlanMigration_ReportsPerSourceCounts(t *testing.T) {

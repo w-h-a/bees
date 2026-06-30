@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/w-h-a/bees/internal/domain"
+	"github.com/w-h-a/bees/v2/internal/domain"
 )
 
 var (

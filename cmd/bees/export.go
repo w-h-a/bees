@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/w-h-a/bees/internal/domain"
+	"github.com/w-h-a/bees/v2/internal/domain"
 )
 
 func newExportCmd() *cobra.Command {

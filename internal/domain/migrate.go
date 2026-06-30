@@ -3,7 +3,7 @@ package domain
 import (
 	"sort"
 
-	"github.com/w-h-a/bees/internal/util/toposort"
+	"github.com/w-h-a/bees/v2/internal/util/toposort"
 )
 
 // SourceIssues is one v1 source store's fully-read contents, handed to the

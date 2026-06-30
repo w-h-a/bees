@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/w-h-a/bees/internal/client/importer"
-	"github.com/w-h-a/bees/internal/domain"
+	"github.com/w-h-a/bees/v2/internal/client/importer"
+	"github.com/w-h-a/bees/v2/internal/domain"
 )
 
 type noopImporter struct {

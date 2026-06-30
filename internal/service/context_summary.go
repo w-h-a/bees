@@ -1,6 +1,6 @@
 package service
 
-import "github.com/w-h-a/bees/internal/domain"
+import "github.com/w-h-a/bees/v2/internal/domain"
 
 type ContextSummary struct {
 	InProgress   []domain.Issue

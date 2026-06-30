@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/w-h-a/bees/internal/domain"
+	"github.com/w-h-a/bees/v2/internal/domain"
 )
 
 func TestPlanMigration_CountsOneSource(t *testing.T) {

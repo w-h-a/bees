@@ -1,4 +1,4 @@
-module github.com/w-h-a/bees
+module github.com/w-h-a/bees/v2
 
 go 1.24.0
 

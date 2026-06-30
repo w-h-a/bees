@@ -3,7 +3,7 @@ package bees
 import (
 	"time"
 
-	"github.com/w-h-a/bees/internal/domain"
+	"github.com/w-h-a/bees/v2/internal/domain"
 )
 
 func mapToIssue(bi beesIssue) domain.Issue {

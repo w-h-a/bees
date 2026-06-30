@@ -9,8 +9,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/w-h-a/bees/internal/client/source"
-	"github.com/w-h-a/bees/internal/domain"
+	"github.com/w-h-a/bees/v2/internal/client/source"
+	"github.com/w-h-a/bees/v2/internal/domain"
 	_ "modernc.org/sqlite"
 )
 

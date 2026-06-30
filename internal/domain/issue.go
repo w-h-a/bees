@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/w-h-a/bees/internal/util/dfs"
+	"github.com/w-h-a/bees/v2/internal/util/dfs"
 )
 
 type Status string
