@@ -9,8 +9,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/w-h-a/bees/internal/domain"
-	"github.com/w-h-a/bees/internal/service"
+	"github.com/w-h-a/bees/v2/internal/domain"
+	"github.com/w-h-a/bees/v2/internal/service"
 )
 
 // Handler is the CLI handler for bees commands. It holds the service and the

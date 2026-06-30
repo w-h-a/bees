@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/w-h-a/bees/internal/client/repo"
-	"github.com/w-h-a/bees/internal/domain"
-	"github.com/w-h-a/bees/internal/util/dfs"
+	"github.com/w-h-a/bees/v2/internal/client/repo"
+	"github.com/w-h-a/bees/v2/internal/domain"
+	"github.com/w-h-a/bees/v2/internal/util/dfs"
 	_ "modernc.org/sqlite"
 )
 

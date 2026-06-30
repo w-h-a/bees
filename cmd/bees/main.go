@@ -6,17 +6,17 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/w-h-a/bees/internal/client/exporter/jsonl"
-	noopexporter "github.com/w-h-a/bees/internal/client/exporter/noop"
-	"github.com/w-h-a/bees/internal/client/importer/bees"
-	noopimporter "github.com/w-h-a/bees/internal/client/importer/noop"
-	"github.com/w-h-a/bees/internal/client/repo"
-	"github.com/w-h-a/bees/internal/client/repo/sqlite"
-	sqlitesource "github.com/w-h-a/bees/internal/client/source/sqlite"
-	"github.com/w-h-a/bees/internal/handler/cli"
-	"github.com/w-h-a/bees/internal/service"
-	"github.com/w-h-a/bees/internal/util/home"
-	"github.com/w-h-a/bees/internal/util/prefix"
+	"github.com/w-h-a/bees/v2/internal/client/exporter/jsonl"
+	noopexporter "github.com/w-h-a/bees/v2/internal/client/exporter/noop"
+	"github.com/w-h-a/bees/v2/internal/client/importer/bees"
+	noopimporter "github.com/w-h-a/bees/v2/internal/client/importer/noop"
+	"github.com/w-h-a/bees/v2/internal/client/repo"
+	"github.com/w-h-a/bees/v2/internal/client/repo/sqlite"
+	sqlitesource "github.com/w-h-a/bees/v2/internal/client/source/sqlite"
+	"github.com/w-h-a/bees/v2/internal/handler/cli"
+	"github.com/w-h-a/bees/v2/internal/service"
+	"github.com/w-h-a/bees/v2/internal/util/home"
+	"github.com/w-h-a/bees/v2/internal/util/prefix"
 )
 
 var (

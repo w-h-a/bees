@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/w-h-a/bees/internal/util/home"
+	"github.com/w-h-a/bees/v2/internal/util/home"
 )
 
 func TestResolve_BeesHomeOverride(t *testing.T) {

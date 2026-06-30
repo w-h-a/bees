@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/w-h-a/bees/internal/domain"
-	"github.com/w-h-a/bees/internal/service"
+	"github.com/w-h-a/bees/v2/internal/domain"
+	"github.com/w-h-a/bees/v2/internal/service"
 )
 
 var (

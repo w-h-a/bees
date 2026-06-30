@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/w-h-a/bees/internal/domain"
-	"github.com/w-h-a/bees/internal/util/duration"
+	"github.com/w-h-a/bees/v2/internal/domain"
+	"github.com/w-h-a/bees/v2/internal/util/duration"
 )
 
 func newDeleteCmd() *cobra.Command {

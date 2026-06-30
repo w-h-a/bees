@@ -1,6 +1,6 @@
 package jsonl
 
-import "github.com/w-h-a/bees/internal/domain"
+import "github.com/w-h-a/bees/v2/internal/domain"
 
 func mapFromIssue(issue domain.Issue) jsonlIssue {
 	ji := jsonlIssue{

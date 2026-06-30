@@ -27,7 +27,7 @@ go install github.com/w-h-a/bees/cmd/bees@v1.31.1
 **v2 (device-global):**
 
 ```sh
-go install github.com/w-h-a/bees/cmd/bees@latest
+go install github.com/w-h-a/bees/v2/cmd/bees@latest
 ```
 
 ## Quick Start

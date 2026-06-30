@@ -3,7 +3,7 @@ package importer
 import (
 	"io"
 
-	"github.com/w-h-a/bees/internal/domain"
+	"github.com/w-h-a/bees/v2/internal/domain"
 )
 
 type Importer interface {
