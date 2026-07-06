@@ -397,7 +397,7 @@ func (s *Service) ListIssues(ctx context.Context, filter domain.ListFilter) ([]d
 		filter.Parent = ""
 	}
 
-	slog.Debug("listing issues", "status", filter.Status, "type", filter.Type, "assignee", filter.Assignee, "label", filter.Label, "parent", parentID, "sort", filter.Sort, "limit", filter.Limit)
+	slog.Debug("listing issues", "prefix", filter.Prefix, "status", filter.Status, "type", filter.Type, "assignee", filter.Assignee, "label", filter.Label, "parent", parentID, "sort", filter.Sort, "limit", filter.Limit)
 
 	issues, err := s.repo.ListIssues(ctx, filter)
 	if err != nil {
@@ -705,10 +705,11 @@ func (s *Service) DeleteIssues(ctx context.Context, filter domain.DeleteFilter) 
 	return count, nil
 }
 
-func (s *Service) Context(ctx context.Context) (*ContextSummary, error) {
+func (s *Service) Context(ctx context.Context, prefix string) (*ContextSummary, error) {
 	slog.Debug("building context summary")
 
 	inProgress, err := s.ListIssues(ctx, domain.ListFilter{
+		Prefix: prefix,
 		Status: string(domain.StatusInProgress),
 		Limit:  1000,
 	})
@@ -717,6 +718,7 @@ func (s *Service) Context(ctx context.Context) (*ContextSummary, error) {
 	}
 
 	open, err := s.ListIssues(ctx, domain.ListFilter{
+		Prefix: prefix,
 		Status: string(domain.StatusOpen),
 		Limit:  1000,
 	})
@@ -749,7 +751,7 @@ func (s *Service) Context(ctx context.Context) (*ContextSummary, error) {
 		}
 	}
 
-	ready, err := s.ReadyIssues(ctx, "", 1000)
+	ready, err := s.ReadyIssues(ctx, prefix, "", 1000)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list ready issues: %w", err)
 	}
@@ -775,6 +777,7 @@ func (s *Service) Context(ctx context.Context) (*ContextSummary, error) {
 
 	since := now.AddDate(0, 0, -7)
 	recentlyDone, err := s.ListIssues(ctx, domain.ListFilter{
+		Prefix: prefix,
 		Status: string(domain.StatusClosed),
 		Since:  &since,
 		Limit:  1000,
@@ -793,7 +796,7 @@ func (s *Service) Context(ctx context.Context) (*ContextSummary, error) {
 	}, nil
 }
 
-func (s *Service) ReadyIssues(ctx context.Context, sort string, limit int) ([]domain.Issue, error) {
+func (s *Service) ReadyIssues(ctx context.Context, prefix string, sort string, limit int) ([]domain.Issue, error) {
 	if sort == "" {
 		sort = "priority"
 	}
@@ -801,9 +804,9 @@ func (s *Service) ReadyIssues(ctx context.Context, sort string, limit int) ([]do
 		limit = 20
 	}
 
-	slog.Debug("listing ready issues", "sort", sort, "limit", limit)
+	slog.Debug("listing ready issues", "prefix", prefix, "sort", sort, "limit", limit)
 
-	issues, err := s.repo.ReadyIssues(ctx, sort, limit)
+	issues, err := s.repo.ReadyIssues(ctx, prefix, sort, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list ready issues: %w", err)
 	}
@@ -817,14 +820,14 @@ func (s *Service) ReadyIssues(ctx context.Context, sort string, limit int) ([]do
 	return issues, nil
 }
 
-func (s *Service) UpcomingIssues(ctx context.Context, days int, assignee string) ([]domain.Issue, error) {
+func (s *Service) UpcomingIssues(ctx context.Context, days int, prefix string, assignee string) ([]domain.Issue, error) {
 	if days <= 0 {
 		days = 15
 	}
 
-	slog.Debug("listing upcoming issues", "days", days, "assignee", assignee)
+	slog.Debug("listing upcoming issues", "days", days, "prefix", prefix, "assignee", assignee)
 
-	issues, err := s.repo.UpcomingIssues(ctx, time.Now(), days, assignee)
+	issues, err := s.repo.UpcomingIssues(ctx, time.Now(), days, prefix, assignee)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list upcoming issues: %w", err)
 	}

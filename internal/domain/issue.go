@@ -75,6 +75,7 @@ func (i *Issue) SetDefaults() {
 }
 
 type ListFilter struct {
+	Prefix   string
 	Status   string
 	Type     string
 	Assignee string

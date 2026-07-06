@@ -5,12 +5,20 @@ import (
 )
 
 func newContextCmd() *cobra.Command {
-	return &cobra.Command{
+	var (
+		prefix string
+	)
+
+	cmd := &cobra.Command{
 		Use:   "context",
 		Short: "Show the current bees context",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return h.Context(cmd.Context(), cmd.OutOrStdout())
+			return h.Context(cmd.Context(), cmd.OutOrStdout(), prefix)
 		},
 	}
+
+	cmd.Flags().StringVar(&prefix, "prefix", "", `Filter by prefix`)
+
+	return cmd
 }

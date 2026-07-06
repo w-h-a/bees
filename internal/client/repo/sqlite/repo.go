@@ -269,6 +269,11 @@ func (r *sqliteRepo) ListIssues(ctx context.Context, filter domain.ListFilter) (
 	query := "SELECT id, title, description, status, type, priority, assignee, estimate_mins, defer_until, due_at, created_at, updated_at, closed_at, parent_id FROM issues WHERE 1=1"
 	var args []any
 
+	if filter.Prefix != "" {
+		query += " AND id LIKE ?"
+		args = append(args, filter.Prefix+"-%")
+	}
+
 	if filter.Status != "all" {
 		status := filter.Status
 		query += " AND status = ?"
@@ -536,8 +541,14 @@ func (r *sqliteRepo) DeleteIssues(ctx context.Context, filter domain.DeleteFilte
 	return int(n), nil
 }
 
-func (r *sqliteRepo) ReadyIssues(ctx context.Context, sort string, limit int) ([]domain.Issue, error) {
+func (r *sqliteRepo) ReadyIssues(ctx context.Context, prefix string, sort string, limit int) ([]domain.Issue, error) {
 	query := "SELECT id, title, description, status, type, priority, assignee, estimate_mins, defer_until, due_at, created_at, updated_at, closed_at, parent_id FROM ready_issues"
+	var args []any
+
+	if prefix != "" {
+		query += " WHERE id LIKE ?"
+		args = append(args, prefix+"-%")
+	}
 
 	switch sort {
 	case "created":
@@ -552,10 +563,11 @@ func (r *sqliteRepo) ReadyIssues(ctx context.Context, sort string, limit int) ([
 		limit = 20
 	}
 	query += " LIMIT ?"
+	args = append(args, limit)
 
-	slog.Debug("ready issues", "query", query, "limit", limit)
+	slog.Debug("ready issues", "query", query, "args", args)
 
-	rows, err := r.db.QueryContext(ctx, query, limit)
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query ready issues: %w", err)
 	}
@@ -588,7 +600,7 @@ func (r *sqliteRepo) ReadyIssues(ctx context.Context, sort string, limit int) ([
 	return issues, rows.Err()
 }
 
-func (r *sqliteRepo) UpcomingIssues(ctx context.Context, now time.Time, days int, assignee string) ([]domain.Issue, error) {
+func (r *sqliteRepo) UpcomingIssues(ctx context.Context, now time.Time, days int, prefix string, assignee string) ([]domain.Issue, error) {
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	end := today.AddDate(0, 0, days+1)
 
@@ -597,6 +609,11 @@ func (r *sqliteRepo) UpcomingIssues(ctx context.Context, now time.Time, days int
 	WHERE defer_until IS NOT NULL AND status IN ('open', 'in_progress') AND defer_until >= ? AND defer_until < ?`
 
 	args := []any{today, end}
+
+	if prefix != "" {
+		query += " AND id LIKE ?"
+		args = append(args, prefix+"-%")
+	}
 
 	if assignee != "" {
 		query += " AND assignee = ?"
