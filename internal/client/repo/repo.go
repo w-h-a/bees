@@ -21,8 +21,8 @@ type Repo interface {
 	ReopenIssue(ctx context.Context, id string, now time.Time) error
 	ListDeleteCandidates(ctx context.Context, filter domain.DeleteFilter) ([]domain.Issue, error)
 	DeleteIssues(ctx context.Context, filter domain.DeleteFilter) (int, error)
-	ReadyIssues(ctx context.Context, sort string, limit int) ([]domain.Issue, error)
-	UpcomingIssues(ctx context.Context, now time.Time, days int, assignee string) ([]domain.Issue, error)
+	ReadyIssues(ctx context.Context, prefix string, sort string, limit int) ([]domain.Issue, error)
+	UpcomingIssues(ctx context.Context, now time.Time, days int, prefix string, assignee string) ([]domain.Issue, error)
 
 	GetLabels(ctx context.Context, issueID string) ([]string, error)
 

@@ -291,8 +291,8 @@ func (h *Handler) List(ctx context.Context, out io.Writer, filter domain.ListFil
 }
 
 // Ready writes the issues ready to work on to out.
-func (h *Handler) Ready(ctx context.Context, out io.Writer, sort string, limit int) error {
-	issues, err := h.svc.ReadyIssues(ctx, sort, limit)
+func (h *Handler) Ready(ctx context.Context, out io.Writer, prefix string, sort string, limit int) error {
+	issues, err := h.svc.ReadyIssues(ctx, prefix, sort, limit)
 	if err != nil {
 		return err
 	}
@@ -309,8 +309,8 @@ func (h *Handler) Ready(ctx context.Context, out io.Writer, sort string, limit i
 }
 
 // Upcoming writes the issues scheduled for the coming days to out.
-func (h *Handler) Upcoming(ctx context.Context, out io.Writer, days int, assignee string) error {
-	issues, err := h.svc.UpcomingIssues(ctx, days, assignee)
+func (h *Handler) Upcoming(ctx context.Context, out io.Writer, days int, prefix string, assignee string) error {
+	issues, err := h.svc.UpcomingIssues(ctx, days, prefix, assignee)
 	if err != nil {
 		return err
 	}
@@ -327,8 +327,8 @@ func (h *Handler) Upcoming(ctx context.Context, out io.Writer, days int, assigne
 }
 
 // Context writes the current context summary to out.
-func (h *Handler) Context(ctx context.Context, out io.Writer) error {
-	summary, err := h.svc.Context(ctx)
+func (h *Handler) Context(ctx context.Context, out io.Writer, prefix string) error {
+	summary, err := h.svc.Context(ctx, prefix)
 	if err != nil {
 		return err
 	}

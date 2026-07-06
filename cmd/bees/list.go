@@ -10,6 +10,7 @@ import (
 
 func newListCmd() *cobra.Command {
 	var (
+		prefix   string
 		status   string
 		typ      string
 		assignee string
@@ -26,6 +27,7 @@ func newListCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			filter := domain.ListFilter{
+				Prefix:   prefix,
 				Status:   status,
 				Type:     typ,
 				Assignee: assignee,
@@ -47,6 +49,7 @@ func newListCmd() *cobra.Command {
 		},
 	}
 
+	cmd.Flags().StringVar(&prefix, "prefix", "", `Filter by prefix`)
 	cmd.Flags().StringVar(&status, "status", "", `Filter by status (open, in_progress, closed, all) (default "open")`)
 	cmd.Flags().StringVar(&typ, "type", "", "Filter by type")
 	cmd.Flags().StringVar(&assignee, "assignee", "", "Filter by assignee")

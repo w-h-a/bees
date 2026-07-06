@@ -612,6 +612,64 @@ func TestListIssues_DefaultsToOpen(t *testing.T) {
 	require.Equal(t, "Open task", issues[0].Title)
 }
 
+func TestListIssues_FilterByPrefix(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	repoA := seedSource(t,
+		domain.Issue{ID: "meld-0001", Title: "Meld one"},
+		domain.Issue{ID: "meld-0002", Title: "Meld two"},
+		domain.Issue{ID: "flock-0001", Title: "Flock one"},
+	)
+	_, err := svc.CommitMigration(ctx, []string{repoA})
+	require.NoError(t, err)
+
+	// Act
+	issues, err := svc.ListIssues(ctx, domain.ListFilter{Prefix: "meld", Status: "all"})
+	require.NoError(t, err)
+
+	// Assert: only the two meld-* issues
+	require.Len(t, issues, 2)
+	ids := map[string]bool{}
+	for _, iss := range issues {
+		ids[iss.ID] = true
+	}
+	require.True(t, ids["meld-0001"])
+	require.True(t, ids["meld-0002"])
+	require.False(t, ids["flock-0001"])
+}
+
+func TestListIssues_PrefixComposesWithType(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	repoA := seedSource(t,
+		domain.Issue{ID: "meld-0001", Title: "Meld feature", Type: domain.TypeFeature},
+		domain.Issue{ID: "meld-0002", Title: "Meld bug", Type: domain.TypeBug},
+		domain.Issue{ID: "flock-0001", Title: "Flock feature", Type: domain.TypeFeature},
+	)
+	_, err := svc.CommitMigration(ctx, []string{repoA})
+	require.NoError(t, err)
+
+	// Act: prefix AND type together
+	issues, err := svc.ListIssues(ctx, domain.ListFilter{Prefix: "meld", Type: "feature", Status: "all"})
+	require.NoError(t, err)
+
+	// Assert: only the meld-* feature — meld bug excluded by type, flock feature excluded by prefix
+	require.Len(t, issues, 1)
+	require.Equal(t, "meld-0001", issues[0].ID)
+}
+
 func TestListIssues_FilterByLabel(t *testing.T) {
 	if os.Getenv("INTEGRATION") == "" {
 		t.Skip("set INTEGRATION=1 to run")
@@ -1622,7 +1680,7 @@ func TestContext_empty(t *testing.T) {
 	ctx := context.Background()
 
 	// Act
-	summary, err := svc.Context(ctx)
+	summary, err := svc.Context(ctx, "")
 	require.NoError(t, err)
 
 	// Assert: all buckets empty
@@ -1674,7 +1732,7 @@ func TestContext_categorizes(t *testing.T) {
 	require.NoError(t, err)
 
 	// Act
-	summary, err := svc.Context(ctx)
+	summary, err := svc.Context(ctx, "")
 	require.NoError(t, err)
 
 	// Assert: in_progress bucket
@@ -1723,7 +1781,7 @@ func TestContext_includes_handoffs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Act
-	summary, err := svc.Context(ctx)
+	summary, err := svc.Context(ctx, "")
 	require.NoError(t, err)
 
 	// Assert: in_progress issue has handoff populated
@@ -1758,7 +1816,7 @@ func TestContext_blocked_in_progress(t *testing.T) {
 	require.NoError(t, err)
 
 	// Act
-	summary, err := svc.Context(ctx)
+	summary, err := svc.Context(ctx, "")
 	require.NoError(t, err)
 
 	// Assert: only A should be in_progress; B is blocked
@@ -1776,6 +1834,55 @@ func TestContext_blocked_in_progress(t *testing.T) {
 	}
 	require.True(t, blockedIDs[bID], "blocked in_progress task should appear in Blocked")
 	require.False(t, blockedIDs[aID], "unblocked in_progress task should not appear in Blocked")
+}
+
+func TestContext_FilterByPrefix(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	repoA := seedSource(t,
+		domain.Issue{ID: "meld-0001", Title: "Meld ready"},
+		domain.Issue{ID: "flock-0001", Title: "Flock ready"},
+	)
+	_, err := svc.CommitMigration(ctx, []string{repoA})
+	require.NoError(t, err)
+
+	// Act
+	summary, err := svc.Context(ctx, "meld")
+	require.NoError(t, err)
+
+	// Assert: the ready section holds only the meld-* issue; flock is filtered out
+	require.Len(t, summary.Ready, 1)
+	require.Equal(t, "meld-0001", summary.Ready[0].ID)
+}
+
+func TestListIssues_UnknownPrefixReturnsEmpty(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	repoA := seedSource(t,
+		domain.Issue{ID: "meld-0001", Title: "Meld one"},
+		domain.Issue{ID: "flock-0001", Title: "Flock one"},
+	)
+	_, err := svc.CommitMigration(ctx, []string{repoA})
+	require.NoError(t, err)
+
+	// Act
+	issues, err := svc.ListIssues(ctx, domain.ListFilter{Prefix: "nope", Status: "all"})
+	require.NoError(t, err)
+
+	// Assert: no match, empty result and no error
+	require.Empty(t, issues)
 }
 
 func TestReadyIssues_ExcludesDeferredAndClosed(t *testing.T) {
@@ -1807,7 +1914,7 @@ func TestReadyIssues_ExcludesDeferredAndClosed(t *testing.T) {
 	require.NoError(t, err)
 
 	// Act
-	issues, err := svc.ReadyIssues(ctx, "", 0)
+	issues, err := svc.ReadyIssues(ctx, "", "", 0)
 	require.NoError(t, err)
 
 	// Assert: only the undeferred open issue
@@ -1833,12 +1940,37 @@ func TestReadyIssues_IncludesPastDeferred(t *testing.T) {
 	require.NoError(t, err)
 
 	// Act
-	issues, err := svc.ReadyIssues(ctx, "", 0)
+	issues, err := svc.ReadyIssues(ctx, "", "", 0)
 	require.NoError(t, err)
 
 	// Assert: past-deferred issue is ready
 	require.Len(t, issues, 1)
 	require.Equal(t, "Was deferred", issues[0].Title)
+}
+
+func TestReadyIssues_FilterByPrefix(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	repoA := seedSource(t,
+		domain.Issue{ID: "meld-0001", Title: "Meld ready"},
+		domain.Issue{ID: "flock-0001", Title: "Flock ready"},
+	)
+	_, err := svc.CommitMigration(ctx, []string{repoA})
+	require.NoError(t, err)
+
+	// Act
+	issues, err := svc.ReadyIssues(ctx, "meld", "", 0)
+	require.NoError(t, err)
+
+	// Assert: only the meld-* ready issue
+	require.Len(t, issues, 1)
+	require.Equal(t, "meld-0001", issues[0].ID)
 }
 
 func TestUpcomingIssues_WindowFilter(t *testing.T) {
@@ -1873,7 +2005,7 @@ func TestUpcomingIssues_WindowFilter(t *testing.T) {
 	require.NoError(t, err)
 
 	// Act
-	issues, err := svc.UpcomingIssues(ctx, 7, "")
+	issues, err := svc.UpcomingIssues(ctx, 7, "", "")
 	require.NoError(t, err)
 
 	// Assert: today and soon, not far
@@ -1896,11 +2028,42 @@ func TestUpcomingIssues_ExcludesNoDefer(t *testing.T) {
 	require.NoError(t, err)
 
 	// Act
-	issues, err := svc.UpcomingIssues(ctx, 7, "")
+	issues, err := svc.UpcomingIssues(ctx, 7, "", "")
 	require.NoError(t, err)
 
 	// Assert
 	require.Empty(t, issues)
+}
+
+func TestUpcomingIssues_FilterByPrefix(t *testing.T) {
+	if os.Getenv("INTEGRATION") == "" {
+		t.Skip("set INTEGRATION=1 to run")
+	}
+
+	// Arrange
+	svc := setupService(t)
+	ctx := context.Background()
+
+	repoA := seedSource(t,
+		domain.Issue{ID: "meld-0001", Title: "Meld upcoming"},
+		domain.Issue{ID: "flock-0001", Title: "Flock upcoming"},
+	)
+	_, err := svc.CommitMigration(ctx, []string{repoA})
+	require.NoError(t, err)
+
+	tomorrow := time.Now().AddDate(0, 0, 1)
+	_, err = svc.UpdateIssue(ctx, "meld-0001", domain.IssueUpdate{DeferUntil: &tomorrow})
+	require.NoError(t, err)
+	_, err = svc.UpdateIssue(ctx, "flock-0001", domain.IssueUpdate{DeferUntil: &tomorrow})
+	require.NoError(t, err)
+
+	// Act
+	issues, err := svc.UpcomingIssues(ctx, 7, "meld", "")
+	require.NoError(t, err)
+
+	// Assert: only the meld-* upcoming issue
+	require.Len(t, issues, 1)
+	require.Equal(t, "meld-0001", issues[0].ID)
 }
 
 func TestUpcomingIssues_FilterByAssignee(t *testing.T) {
@@ -1931,7 +2094,7 @@ func TestUpcomingIssues_FilterByAssignee(t *testing.T) {
 	require.NoError(t, err)
 
 	// Act
-	issues, err := svc.UpcomingIssues(ctx, 7, "wes")
+	issues, err := svc.UpcomingIssues(ctx, 7, "", "wes")
 	require.NoError(t, err)
 
 	// Assert
@@ -1961,7 +2124,7 @@ func TestUpcomingIssues_ExcludesClosed(t *testing.T) {
 	require.NoError(t, err)
 
 	// Act
-	issues, err := svc.UpcomingIssues(ctx, 7, "")
+	issues, err := svc.UpcomingIssues(ctx, 7, "", "")
 	require.NoError(t, err)
 
 	// Assert: closed issue excluded despite defer_until in window
@@ -1987,7 +2150,7 @@ func TestUpcomingIssues_IncludesType(t *testing.T) {
 	require.NoError(t, err)
 
 	// Act
-	issues, err := svc.UpcomingIssues(ctx, 7, "")
+	issues, err := svc.UpcomingIssues(ctx, 7, "", "")
 	require.NoError(t, err)
 
 	// Assert
@@ -2417,7 +2580,7 @@ func TestReadyIssues_ExcludesBlocked(t *testing.T) {
 	require.NoError(t, err)
 
 	// Act
-	issues, err := svc.ReadyIssues(ctx, "", 0)
+	issues, err := svc.ReadyIssues(ctx, "", "", 0)
 	require.NoError(t, err)
 
 	// Assert: only the blocker is ready
